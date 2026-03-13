@@ -711,13 +711,10 @@ export default function Catalog() {
               const input = document.createElement("input");
               input.type = "file";
               input.accept = ".xlsx,.xls,.csv,.pdf";
+              input.multiple = true;
               input.onchange = (ev) => {
-                const file = (ev.target as HTMLInputElement).files?.[0];
-                if (!file) return;
-                const ext = file.name.split(".").pop()?.toLowerCase();
-                const fakeEvent = { target: { files: [file], value: "" } } as unknown as React.ChangeEvent<HTMLInputElement>;
-                if (ext === "pdf") handlePdfImport(fakeEvent);
-                else handleFileImport(fakeEvent);
+                const selected = Array.from((ev.target as HTMLInputElement).files || []);
+                if (selected.length > 0) { setWizardFiles(selected); setWizardOpen(true); }
               };
               input.click();
             }}

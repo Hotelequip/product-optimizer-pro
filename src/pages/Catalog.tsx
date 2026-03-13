@@ -455,6 +455,7 @@ export default function Catalog() {
   const fetchAndEnrich = async (baseUrl?: string, alsoEnrich?: boolean) => {
     if (!user || fetchingImages) return;
     cancelRef.current = false;
+    setCancelRequested(false);
     setFetchingImages(true);
     setImageDialogOpen(false);
     const currentCatalogName = selectedCatalogId === "all"
@@ -463,12 +464,13 @@ export default function Catalog() {
       ? "Sem pasta"
       : catalogs.find(c => c.id === selectedCatalogId)?.name || "Catálogo";
     setFetchProgress(null);
+
     try {
       let query = supabase
         .from("products")
         .select("id, name, sku, supplier_url, image_url, description")
         .eq("user_id", user.id);
-      
+
       if (selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized") {
         query = query.eq("catalog_id", selectedCatalogId);
       } else if (selectedCatalogId === "uncategorized") {
@@ -479,7 +481,6 @@ export default function Catalog() {
 
       if (!allCatalogProducts || allCatalogProducts.length === 0) {
         toast({ title: "Nenhum produto encontrado", description: "Esta pasta não tem produtos." });
-        setFetchingImages(false);
         return;
       }
 
@@ -488,7 +489,6 @@ export default function Catalog() {
 
       if (noImageProducts.length === 0 && noDataProducts.length === 0) {
         toast({ title: "Tudo completo!", description: "Todos os produtos já têm imagem e dados." });
-        setFetchingImages(false);
         return;
       }
 
@@ -496,11 +496,16 @@ export default function Catalog() {
       let currentStep = 0;
       let foundImages = 0;
       let enriched = 0;
+      let wasCancelled = false;
 
       // Process images in batches of 5
       const IMG_BATCH = 5;
       for (let i = 0; i < noImageProducts.length; i += IMG_BATCH) {
-        if (cancelRef.current) break;
+        if (cancelRef.current) {
+          wasCancelled = true;
+          break;
+        }
+
         const batch = noImageProducts.slice(i, i + IMG_BATCH);
         setFetchProgress({
           current: currentStep,
@@ -518,8 +523,18 @@ export default function Catalog() {
           },
         });
 
+        if (cancelRef.current) {
+          wasCancelled = true;
+          break;
+        }
+
         if (!error && data?.success) {
           for (const r of (data.results || [])) {
+            if (cancelRef.current) {
+              wasCancelled = true;
+              break;
+            }
+
             if (r.success && r.image_url) {
               await supabase.from("products").update({ image_url: r.image_url }).eq("id", r.product_id);
               foundImages++;
@@ -527,16 +542,24 @@ export default function Catalog() {
           }
         }
 
+        if (cancelRef.current) {
+          wasCancelled = true;
+          break;
+        }
+
         currentStep += batch.length;
         setFetchProgress({ current: currentStep, total: totalSteps, currentName: "", found: foundImages, catalogName: currentCatalogName });
-        // Refresh products after each batch for visual feedback
         queryClient.invalidateQueries({ queryKey: ["products"] });
       }
 
       // Process enrichment in batches of 5
       const ENRICH_BATCH = 5;
       for (let i = 0; i < noDataProducts.length; i += ENRICH_BATCH) {
-        if (cancelRef.current) break;
+        if (cancelRef.current) {
+          wasCancelled = true;
+          break;
+        }
+
         const batch = noDataProducts.slice(i, i + ENRICH_BATCH);
         setFetchProgress({
           current: currentStep,
@@ -554,8 +577,18 @@ export default function Catalog() {
           },
         });
 
+        if (cancelRef.current) {
+          wasCancelled = true;
+          break;
+        }
+
         if (!error && data?.success) {
           for (const r of (data.results || [])) {
+            if (cancelRef.current) {
+              wasCancelled = true;
+              break;
+            }
+
             if (r.success && r.enriched) {
               const updates: Record<string, unknown> = {};
               if (r.enriched.description) updates.description = r.enriched.description;
@@ -576,8 +609,19 @@ export default function Catalog() {
           }
         }
 
+        if (cancelRef.current) {
+          wasCancelled = true;
+          break;
+        }
+
         currentStep += batch.length;
+        setFetchProgress({ current: currentStep, total: totalSteps, currentName: "", found: foundImages + enriched, catalogName: currentCatalogName });
         queryClient.invalidateQueries({ queryKey: ["products"] });
+      }
+
+      if (wasCancelled || cancelRef.current) {
+        toast({ title: "Cancelado", description: "A operação foi interrompida." });
+        return;
       }
 
       setFetchProgress(null);
@@ -586,7 +630,7 @@ export default function Catalog() {
       const summary: string[] = [];
       if (foundImages > 0) summary.push(`${foundImages} imagem(ns)`);
       if (enriched > 0) summary.push(`${enriched} produto(s) enriquecido(s)`);
-      
+
       if (summary.length > 0) {
         toast({ title: `Concluído: ${summary.join(" · ")}`, description: "Dados atualizados com sucesso." });
       } else {
@@ -596,6 +640,7 @@ export default function Catalog() {
       console.warn("Fetch & enrich error:", e);
       toast({ title: "Erro", description: e.message || "Erro ao processar.", variant: "destructive" });
     } finally {
+      setCancelRequested(false);
       setFetchingImages(false);
       setFetchProgress(null);
     }

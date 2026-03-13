@@ -7,6 +7,7 @@ export interface Catalog {
   id: string;
   user_id: string;
   name: string;
+  supplier_url: string | null;
   created_at: string;
 }
 
@@ -31,10 +32,10 @@ export function useCreateCatalog() {
   const { toast } = useToast();
   const { user } = useAuth();
   return useMutation({
-    mutationFn: async (name: string) => {
+    mutationFn: async ({ name, supplier_url }: { name: string; supplier_url?: string }) => {
       const { data, error } = await supabase
         .from("catalogs")
-        .insert([{ name, user_id: user!.id } as any])
+        .insert([{ name, supplier_url: supplier_url || null, user_id: user!.id } as any])
         .select()
         .single();
       if (error) throw error;
@@ -43,6 +44,22 @@ export function useCreateCatalog() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["catalogs"] });
       toast({ title: "Pasta criada com sucesso!" });
+    },
+    onError: (e: Error) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
+}
+
+export function useUpdateCatalog() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: async ({ id, ...updates }: { id: string; name?: string; supplier_url?: string | null }) => {
+      const { error } = await supabase.from("catalogs").update(updates as any).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["catalogs"] });
+      toast({ title: "Pasta atualizada!" });
     },
     onError: (e: Error) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });

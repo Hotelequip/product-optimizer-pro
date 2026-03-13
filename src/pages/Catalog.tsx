@@ -1400,9 +1400,7 @@ function ImageGalleryTab({ products }: { products: Product[] }) {
       const { data, error } = await supabase.functions.invoke("ai-enrich", {
         body: {
           action: "optimize_image",
-          product_id: product.id,
-          image_url: product.image_url,
-          product_name: product.name,
+          product: { image_url: product.image_url, product_name: product.name },
         },
       });
 

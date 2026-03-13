@@ -5,27 +5,51 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-// Helper: call AI gateway
-async function callAI(apiKey: string, model: string, messages: any[], modalities?: string[]) {
+// Helper: call AI gateway with retry + exponential backoff
+async function callAI(apiKey: string, model: string, messages: any[], modalities?: string[], maxRetries = 4) {
   const body: any = { model, messages };
   if (modalities) body.modalities = modalities;
 
-  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
 
-  if (!response.ok) {
-    if (response.status === 429) throw { status: 429, message: 'Limite de requisições excedido. Tenta novamente em breve.' };
-    if (response.status === 402) throw { status: 402, message: 'Créditos insuficientes. Adiciona créditos em Settings → Workspace → Usage.' };
-    throw { status: 500, message: `AI error: ${response.status}` };
+    if (response.ok) {
+      return await response.json();
+    }
+
+    if (response.status === 402) {
+      await response.text();
+      throw { status: 402, message: 'Créditos insuficientes. Adiciona créditos em Settings → Workspace → Usage.' };
+    }
+
+    if (response.status === 429 && attempt < maxRetries) {
+      const retryAfter = response.headers.get('Retry-After');
+      let waitMs = 1000 * Math.pow(2, attempt) + Math.random() * 1000;
+      if (retryAfter) {
+        const parsed = parseInt(retryAfter, 10);
+        if (!isNaN(parsed)) waitMs = parsed * 1000;
+      }
+      console.log(`Rate limited, retrying in ${Math.round(waitMs)}ms (attempt ${attempt + 1}/${maxRetries})`);
+      await response.text(); // consume body
+      await new Promise(resolve => setTimeout(resolve, waitMs));
+      continue;
+    }
+
+    const errText = await response.text();
+    if (response.status === 429) {
+      throw { status: 429, message: 'Limite de requisições excedido após várias tentativas. Tenta novamente mais tarde.' };
+    }
+    throw { status: response.status, message: `AI error: ${response.status} - ${errText}` };
   }
 
-  return await response.json();
+  throw { status: 429, message: 'Limite de requisições excedido após várias tentativas.' };
 }
 
 function jsonResponse(data: any, status = 200) {

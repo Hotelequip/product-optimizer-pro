@@ -1,4 +1,4 @@
-import { LayoutDashboard, Package, DollarSign, BarChart3, LogOut, FolderOpen } from "lucide-react";
+import { LayoutDashboard, Package, DollarSign, BarChart3, LogOut, FolderOpen, Store } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,6 +22,7 @@ const navItems = [
   { title: "Categorias", url: "/categories", icon: FolderOpen },
   { title: "Preços", url: "/pricing", icon: DollarSign },
   { title: "Análise", url: "/analysis", icon: BarChart3 },
+  { title: "WooCommerce", url: "/woocommerce", icon: Store },
 ];
 
 export function AppSidebar() {

@@ -444,9 +444,10 @@ export default function Catalog() {
   };
 
   // Fetch images for products missing image_url
-  const fetchMissingImages = async () => {
+  const fetchMissingImages = async (baseUrl?: string) => {
     if (!user || fetchingImages) return;
     setFetchingImages(true);
+    setImageDialogOpen(false);
     try {
       const { data: noImageProducts } = await supabase
         .from("products")
@@ -463,11 +464,15 @@ export default function Catalog() {
 
       toast({
         title: `A procurar imagens para ${noImageProducts.length} produto(s)...`,
-        description: "Isto acontece em segundo plano.",
+        description: baseUrl ? `No site ${baseUrl}` : "Via pesquisa web. Isto pode demorar.",
       });
 
       const { data, error } = await supabase.functions.invoke("web-scrape-product", {
-        body: { action: "fetch_images", products: noImageProducts },
+        body: {
+          action: "fetch_images",
+          products: noImageProducts,
+          base_supplier_url: baseUrl || null,
+        },
       });
 
       if (error || !data?.success) {

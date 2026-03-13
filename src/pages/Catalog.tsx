@@ -494,6 +494,7 @@ export default function Catalog() {
       // Process images in batches of 5
       const IMG_BATCH = 5;
       for (let i = 0; i < noImageProducts.length; i += IMG_BATCH) {
+        if (cancelRef.current) break;
         const batch = noImageProducts.slice(i, i + IMG_BATCH);
         setFetchProgress({
           current: currentStep,

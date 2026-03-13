@@ -65,7 +65,7 @@ export function useUpdateProduct() {
           user_id: user!.id,
           old_price: existing.price,
           new_price: updates.price,
-        });
+        }]);
       }
       const { data, error } = await supabase.from("products").update(updates).eq("id", id).select().single();
       if (error) throw error;

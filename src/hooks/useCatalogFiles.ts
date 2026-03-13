@@ -38,11 +38,14 @@ export function useAddCatalogFile() {
   const { user } = useAuth();
   return useMutation({
     mutationFn: async (file: { catalog_id: string | null; file_name: string; file_url: string; file_type: string; file_size: number }) => {
+      if (!user) throw new Error("Sessão expirada. Inicie sessão novamente.");
+
       const { data, error } = await supabase
         .from("catalog_files" as any)
-        .insert({ ...file, user_id: user!.id } as any)
+        .insert({ ...file, user_id: user.id } as any)
         .select()
         .single();
+
       if (error) throw error;
       return data as unknown as CatalogFile;
     },

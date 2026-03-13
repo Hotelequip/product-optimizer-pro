@@ -1,4 +1,5 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useProducts, useCreateProduct, useUpdateProduct, Product } from "@/hooks/useProducts";
 import { useCategories } from "@/hooks/useCategories";
 import { useCatalogs, useCreateCatalog, useDeleteCatalog, useRenameCatalog } from "@/hooks/useCatalogs";
@@ -16,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Upload, Sheet, FileUp, Loader2, FolderPlus, Folder, FolderOpen, Trash2, Search, Pencil, ImageIcon, FileText, Download, File } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { SpreadsheetEditor } from "@/components/SpreadsheetEditor";
 import { WooCommerceSync } from "@/components/WooCommerceSync";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,6 +32,8 @@ export default function Catalog() {
   const deleteCatalog = useDeleteCatalog();
   const renameCatalog = useRenameCatalog();
   const addCatalogFile = useAddCatalogFile();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { toast } = useToast();
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -73,11 +77,16 @@ export default function Catalog() {
   };
 
   // Helper: normalize header string (lowercase, remove diacritics, trim)
-  const normalizeHeader = (h: any) =>
-    String(h || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+  const normalizeHeader = (h: unknown) =>
+    String(h || "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ");
 
   // Helper: parse number with European format support (1.234,56 → 1234.56)
-  const parseNum = (val: any): number => {
+  const parseNum = (val: unknown): number => {
     if (val === null || val === undefined || val === "") return 0;
     if (typeof val === "number") return val;
     let s = String(val).replace(/\s/g, "").replace(/[R$€]/g, "");
@@ -88,21 +97,141 @@ export default function Catalog() {
     return parseFloat(s) || 0;
   };
 
+  const parseCsvLine = (line: string, delimiter: string) => {
+    const values: string[] = [];
+    let current = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === delimiter && !inQuotes) {
+        values.push(current.trim());
+        current = "";
+      } else {
+        current += char;
+      }
+    }
+
+    values.push(current.trim());
+    return values;
+  };
+
   // Helper: find value from row using multiple possible keys
   const findVal = (row: Record<string, string>, keys: string[]): string => {
-    for (const k of keys) {
-      for (const rk of Object.keys(row)) {
-        if (normalizeHeader(rk).includes(k)) return row[rk];
+    const normalizedKeys = keys.map(normalizeHeader);
+    for (const rk of Object.keys(row)) {
+      const normalizedHeader = normalizeHeader(rk);
+      if (normalizedKeys.some((k) => normalizedHeader.includes(k))) {
+        return row[rk];
       }
     }
     return "";
   };
 
+  const detectHeaderRowIndex = (rowsMatrix: unknown[][]) => {
+    const headerHints = [
+      "description", "descricao", "designacao", "name", "nome", "ref", "referencia", "sku", "codigo",
+      "tarif", "cost", "custo", "price", "preco", "pvp", "stock", "quantidade", "qty",
+    ];
+
+    let bestIndex = 0;
+    let bestScore = -1;
+
+    for (let i = 0; i < Math.min(40, rowsMatrix.length); i++) {
+      const row = (rowsMatrix[i] || []) as unknown[];
+      const cells = row.map((c) => normalizeHeader(c)).filter(Boolean);
+      if (cells.length < 2) continue;
+
+      const hintScore = cells.reduce((acc, cell) => {
+        const matchesHint = headerHints.some((hint) => cell.includes(hint));
+        return acc + (matchesHint ? 3 : /[a-zA-ZÀ-ÿ]/.test(cell) ? 1 : 0);
+      }, 0);
+
+      if (hintScore > bestScore) {
+        bestScore = hintScore;
+        bestIndex = i;
+      }
+    }
+
+    if (bestScore > 0) return bestIndex;
+
+    for (let i = 0; i < Math.min(20, rowsMatrix.length); i++) {
+      const row = (rowsMatrix[i] || []) as unknown[];
+      const nonEmpty = row.filter((c) => String(c || "").trim().length > 0).length;
+      const hasText = row.some((c) => typeof c === "string" && c.trim().length > 1 && Number.isNaN(Number(c)));
+      if (nonEmpty >= 3 && hasText) return i;
+    }
+
+    return 0;
+  };
+
+  const buildSafeStoragePath = (file: File) => {
+    const sanitizedName = file.name
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9._-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+
+    return `${user!.id}/${Date.now()}-${sanitizedName || "arquivo"}`;
+  };
+
+  const insertProductsInBatches = async (items: Array<Record<string, unknown>>) => {
+    const BATCH_SIZE = 100;
+    let inserted = 0;
+
+    for (let i = 0; i < items.length; i += BATCH_SIZE) {
+      const chunk = items.slice(i, i + BATCH_SIZE);
+      const { data, error } = await supabase.from("products").insert(chunk as any).select("id");
+      if (error) {
+        throw new Error(`Falha no lote ${Math.floor(i / BATCH_SIZE) + 1}: ${error.message}`);
+      }
+      inserted += data?.length ?? chunk.length;
+    }
+
+    return inserted;
+  };
+
+  const attachImportedFile = async (file: File, catalogId: string | null, forcedType?: "excel" | "pdf" | "other") => {
+    const storagePath = buildSafeStoragePath(file);
+    const { error: uploadErr } = await supabase.storage
+      .from("catalog-files")
+      .upload(storagePath, file, { upsert: false, contentType: file.type || undefined });
+
+    if (uploadErr) {
+      throw new Error(`Falha ao associar ficheiro: ${uploadErr.message}`);
+    }
+
+    const { data: urlData } = supabase.storage.from("catalog-files").getPublicUrl(storagePath);
+    const ext = file.name.split(".").pop()?.toLowerCase() || "";
+    const fileType = forcedType ?? (["xlsx", "xls", "csv"].includes(ext) ? "excel" : ext === "pdf" ? "pdf" : "other");
+
+    await addCatalogFile.mutateAsync({
+      catalog_id: catalogId,
+      file_name: file.name,
+      file_url: urlData.publicUrl,
+      file_type: fileType,
+      file_size: file.size,
+    });
+  };
+
   // Excel/CSV import — assigns to selected catalog
-  const handleFileImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const ext = file.name.split(".").pop()?.toLowerCase();
+
+    if (!user) {
+      toast({ title: "Sessão expirada", description: "Inicie sessão novamente para importar.", variant: "destructive" });
+      return;
+    }
 
     setImporting(true);
     try {
@@ -112,96 +241,120 @@ export default function Catalog() {
         const XLSX = await import("xlsx");
         const buffer = await file.arrayBuffer();
         const wb = XLSX.read(buffer, { type: "array" });
-        const ws = wb.Sheets[wb.SheetNames[0]];
 
-        // Auto-detect header row: scan first 20 rows for a row with 3+ non-empty cells
-        const allRows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" });
-        let headerRowIdx = 0;
-        for (let i = 0; i < Math.min(20, allRows.length); i++) {
-          const row = allRows[i] as any[];
-          if (!row) continue;
-          const nonEmpty = row.filter(c => String(c || "").trim().length > 0).length;
-          if (nonEmpty >= 3) {
-            // Check if this looks like a header (has text, not just numbers)
-            const hasText = row.some(c => typeof c === "string" && c.trim().length > 1 && isNaN(Number(c)));
-            if (hasText) { headerRowIdx = i; break; }
-          }
-        }
+        rows = wb.SheetNames.flatMap((sheetName) => {
+          const ws = wb.Sheets[sheetName];
+          const allRows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "" });
+          const headerRowIdx = detectHeaderRowIndex(allRows as unknown[][]);
+          const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "", range: headerRowIdx });
 
-        // Re-parse with detected header row
-        const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: "", range: headerRowIdx });
-        rows = jsonData.map(r => {
-          const out: Record<string, string> = {};
-          Object.keys(r).forEach(k => { out[k.trim()] = String(r[k]).trim(); });
-          return out;
+          return jsonData
+            .map((r) => {
+              const out: Record<string, string> = {};
+              Object.keys(r).forEach((k) => {
+                out[String(k).trim()] = String(r[k] ?? "").trim();
+              });
+              return out;
+            })
+            .filter((r) => Object.values(r).some((v) => v.length > 0));
         });
       } else if (ext === "csv") {
         const text = await file.text();
-        const lines = text.split("\n").filter(Boolean);
-        const headers = lines[0].split(",").map(h => h.trim());
+        const lines = text
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter(Boolean);
+
+        if (lines.length < 2) throw new Error("CSV sem dados suficientes.");
+
+        const delimiter = (lines[0].match(/;/g)?.length ?? 0) > (lines[0].match(/,/g)?.length ?? 0) ? ";" : ",";
+        const headers = parseCsvLine(lines[0], delimiter);
+
         for (let i = 1; i < lines.length; i++) {
-          const vals = lines[i].split(",").map(v => v.trim());
+          const vals = parseCsvLine(lines[i], delimiter);
           const row: Record<string, string> = {};
-          headers.forEach((h, idx) => (row[h] = vals[idx] || ""));
+          headers.forEach((h, idx) => {
+            row[h] = vals[idx] || "";
+          });
           rows.push(row);
         }
       } else {
-        toast({ title: "Formato não suportado", description: "Use .xlsx, .xls ou .csv", variant: "destructive" });
-        setImporting(false);
-        return;
+        throw new Error("Formato não suportado. Use .xlsx, .xls ou .csv");
       }
 
       const catalogId = selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized" ? selectedCatalogId : null;
 
-      let imported = 0;
-      for (const row of rows) {
-        // Flexible name detection
-        const name = findVal(row, ["description", "descricao", "name", "nome", "titulo", "title", "product name", "produto", "designacao"]);
-        if (!name) continue;
-        try {
-          await createProduct.mutateAsync({
+      const mapped = rows
+        .map((row) => {
+          const directName = findVal(row, ["description", "descricao", "name", "nome", "titulo", "title", "product name", "produto", "designacao"]);
+          const fallbackName = Object.values(row).find((v) => {
+            const value = String(v || "").trim();
+            return value.length > 2 && /[a-zA-ZÀ-ÿ]/.test(value) && !/^\d+$/.test(value);
+          }) || "";
+          const name = (directName || fallbackName).trim();
+
+          if (!name) return null;
+
+          const stockRaw = parseNum(findVal(row, ["stock", "estoque", "qty", "quantidade", "std", "units"]));
+
+          return {
+            user_id: user.id,
             name,
             description: null,
             sku: findVal(row, ["ref", "sku", "referencia", "codigo", "code", "cod"]) || null,
             cost: parseNum(findVal(row, ["cost", "custo", "tarif", "preco custo", "net", "euro"])),
             price: parseNum(findVal(row, ["price", "preco", "pvp", "sell", "venda"])),
-            stock: parseInt(findVal(row, ["stock", "estoque", "qty", "quantidade", "std", "units"])) || 0,
+            stock: Number.isFinite(stockRaw) ? Math.max(0, Math.trunc(stockRaw)) : 0,
             brand: findVal(row, ["brand", "marca"]) || null,
             supplier_url: findVal(row, ["supplier_url", "url", "fornecedor_url"]) || null,
             status: "draft",
             catalog_id: catalogId,
-          } as any);
-          imported++;
-        } catch {}
+          };
+        })
+        .filter(Boolean) as Array<Record<string, unknown>>;
+
+      const deduped: Array<Record<string, unknown>> = [];
+      const seen = new Set<string>();
+      for (const product of mapped) {
+        const key = `${String(product.sku ?? "").toLowerCase()}|${String(product.name ?? "").toLowerCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(product);
       }
-      // Save file to catalog_files
-      try {
-        const fileName = `${Date.now()}-${file.name}`;
-        const { error: uploadErr } = await supabase.storage.from("catalog-files").upload(fileName, file, { upsert: true });
-        if (!uploadErr) {
-          const { data: urlData } = supabase.storage.from("catalog-files").getPublicUrl(fileName);
-          const ext2 = file.name.split(".").pop()?.toLowerCase() || "";
-          await addCatalogFile.mutateAsync({
-            catalog_id: catalogId,
-            file_name: file.name,
-            file_url: urlData.publicUrl,
-            file_type: ["xlsx", "xls", "csv"].includes(ext2) ? "excel" : "other",
-            file_size: file.size,
-          });
-        }
-      } catch {}
-      toast({ title: `${imported} produtos importados de ${file.name}!` });
+
+      if (deduped.length === 0) {
+        throw new Error("Nenhuma linha válida encontrada para importar.");
+      }
+
+      const imported = await insertProductsInBatches(deduped);
+      await attachImportedFile(file, catalogId, "excel");
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["products"] }),
+        queryClient.invalidateQueries({ queryKey: ["catalog_files"] }),
+      ]);
+
+      toast({
+        title: `${imported} produtos importados`,
+        description: `Ficheiro ${file.name} associado com sucesso.`,
+      });
     } catch (err: any) {
       toast({ title: "Erro na importação", description: err.message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+      e.target.value = "";
     }
-    setImporting(false);
-    e.target.value = "";
-  }, [createProduct, toast, selectedCatalogId]);
+  };
 
   // PDF import
-  const handlePdfImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePdfImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !file.name.endsWith(".pdf")) return;
+    if (!file || !file.name.toLowerCase().endsWith(".pdf")) return;
+
+    if (!user) {
+      toast({ title: "Sessão expirada", description: "Inicie sessão novamente para importar.", variant: "destructive" });
+      return;
+    }
 
     setImporting(true);
     try {
@@ -210,83 +363,85 @@ export default function Catalog() {
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       let fullText = "";
+
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
         fullText += content.items.map((item: any) => item.str).join(" ") + "\n";
       }
 
-      if (!fullText.trim()) {
-        toast({ title: "PDF vazio", variant: "destructive" });
-        setImporting(false);
-        return;
-      }
+      if (!fullText.trim()) throw new Error("PDF vazio.");
 
       const { data, error } = await supabase.functions.invoke("extract-products", { body: { text: fullText } });
       if (error) throw error;
 
       const catalogId = selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized" ? selectedCatalogId : null;
 
-      if (data.success && data.products?.length > 0) {
-        let imported = 0;
-        for (const p of data.products) {
-          try {
-            await createProduct.mutateAsync({
-              name: p.name,
-              description: p.description || null,
-              sku: p.sku || null,
-              cost: p.cost || 0,
-              price: p.price || 0,
-              stock: p.stock || 0,
-              brand: p.brand || null,
-              status: "draft",
-              catalog_id: catalogId,
-            } as any);
-            imported++;
-          } catch {}
-        }
-        // Save PDF to catalog_files
-        try {
-          const fileName = `${Date.now()}-${file.name}`;
-          const { error: uploadErr } = await supabase.storage.from("catalog-files").upload(fileName, file, { upsert: true });
-          if (!uploadErr) {
-            const { data: urlData } = supabase.storage.from("catalog-files").getPublicUrl(fileName);
-            await addCatalogFile.mutateAsync({
-              catalog_id: catalogId,
-              file_name: file.name,
-              file_url: urlData.publicUrl,
-              file_type: "pdf",
-              file_size: file.size,
-            });
-          }
-        } catch {}
-        toast({ title: `${imported} produtos importados do PDF!` });
-      } else {
-        toast({ title: "Nenhum produto encontrado no PDF", variant: "destructive" });
+      if (!data?.success || !Array.isArray(data.products) || data.products.length === 0) {
+        throw new Error("Nenhum produto encontrado no PDF.");
       }
+
+      const productsToInsert = data.products
+        .map((p: any) => ({
+          user_id: user.id,
+          name: String(p?.name || "").trim(),
+          description: p?.description || null,
+          sku: p?.sku || null,
+          cost: parseNum(p?.cost),
+          price: parseNum(p?.price),
+          stock: Math.max(0, Math.trunc(parseNum(p?.stock))),
+          brand: p?.brand || null,
+          status: "draft",
+          catalog_id: catalogId,
+        }))
+        .filter((p: any) => p.name.length > 0);
+
+      if (productsToInsert.length === 0) {
+        throw new Error("Não foi possível mapear produtos válidos do PDF.");
+      }
+
+      const imported = await insertProductsInBatches(productsToInsert);
+      await attachImportedFile(file, catalogId, "pdf");
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["products"] }),
+        queryClient.invalidateQueries({ queryKey: ["catalog_files"] }),
+      ]);
+
+      toast({
+        title: `${imported} produtos importados do PDF`,
+        description: `Ficheiro ${file.name} associado com sucesso.`,
+      });
     } catch (err: any) {
       toast({ title: "Erro ao processar PDF", description: err.message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+      e.target.value = "";
     }
-    setImporting(false);
-    e.target.value = "";
-  }, [createProduct, toast, selectedCatalogId]);
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files);
     if (files.length === 0) return;
+
     const file = files[0];
     const ext = file.name.split(".").pop()?.toLowerCase();
+    const fakeEvent = { target: { files: [file], value: "" } } as unknown as React.ChangeEvent<HTMLInputElement>;
+
     if (ext === "pdf") {
-      const fakeEvent = { target: { files: [file], value: "" } } as unknown as React.ChangeEvent<HTMLInputElement>;
       handlePdfImport(fakeEvent);
-    } else if (["xlsx", "xls", "csv"].includes(ext || "")) {
-      const fakeEvent = { target: { files: [file], value: "" } } as unknown as React.ChangeEvent<HTMLInputElement>;
-      handleFileImport(fakeEvent);
-    } else {
-      toast({ title: "Formato não suportado", description: "Use .xlsx, .xls, .csv ou .pdf", variant: "destructive" });
+      return;
     }
-  }, [handleFileImport, handlePdfImport, toast]);
+
+    if (["xlsx", "xls", "csv"].includes(ext || "")) {
+      handleFileImport(fakeEvent);
+      return;
+    }
+
+    toast({ title: "Formato não suportado", description: "Use .xlsx, .xls, .csv ou .pdf", variant: "destructive" });
+  };
 
   return (
     <div
@@ -972,6 +1127,7 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
   const { data: files = [], isLoading } = useCatalogFiles(selectedCatalogId);
   const addFile = useAddCatalogFile();
   const deleteFile = useDeleteCatalogFile();
+  const { user } = useAuth();
   const { toast } = useToast();
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -979,15 +1135,28 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
   const catalogId = selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized" ? selectedCatalogId : null;
 
   const uploadFile = async (file: globalThis.File) => {
+    if (!user) {
+      toast({ title: "Sessão expirada", description: "Inicie sessão novamente para carregar ficheiros.", variant: "destructive" });
+      return;
+    }
+
     setUploading(true);
     try {
-      const fileName = `${Date.now()}-${file.name}`;
+      const sanitizedName = file.name
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9._-]+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "");
+
+      const storagePath = `${user.id}/${Date.now()}-${sanitizedName || "arquivo"}`;
       const { error: uploadError } = await supabase.storage
         .from("catalog-files")
-        .upload(fileName, file, { upsert: true });
-      if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage.from("catalog-files").getPublicUrl(fileName);
+        .upload(storagePath, file, { upsert: false, contentType: file.type || undefined });
 
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from("catalog-files").getPublicUrl(storagePath);
       const ext = file.name.split(".").pop()?.toLowerCase() || "";
       const fileType = ["xlsx", "xls", "csv"].includes(ext) ? "excel" : ext === "pdf" ? "pdf" : "other";
 
@@ -998,11 +1167,13 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
         file_type: fileType,
         file_size: file.size,
       });
+
       toast({ title: `Ficheiro "${file.name}" carregado!` });
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } finally {
+      setUploading(false);
     }
-    setUploading(false);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -1019,8 +1190,8 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
   };
 
   const getFileIcon = (type: string) => {
-    if (type === "pdf") return <FileUp className="h-5 w-5 text-red-500" />;
-    if (type === "excel") return <Sheet className="h-5 w-5 text-emerald-500" />;
+    if (type === "pdf") return <FileUp className="h-5 w-5 text-destructive" />;
+    if (type === "excel") return <Sheet className="h-5 w-5 text-primary" />;
     return <File className="h-5 w-5 text-muted-foreground" />;
   };
 

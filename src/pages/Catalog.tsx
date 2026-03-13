@@ -1016,6 +1016,9 @@ export default function Catalog() {
           <TabsTrigger value="spreadsheet" className="gap-1.5">
             <Sheet className="h-3.5 w-3.5" />Planilha
           </TabsTrigger>
+          <TabsTrigger value="optimized" className="gap-1.5">
+            <Sparkles className="h-3.5 w-3.5" />Otimizados
+          </TabsTrigger>
           <TabsTrigger value="images" className="gap-1.5">
             <ImageIcon className="h-3.5 w-3.5" />Imagens
           </TabsTrigger>
@@ -1031,6 +1034,14 @@ export default function Catalog() {
           <Card>
             <CardContent className="pt-4">
               <SpreadsheetEditor products={filteredProducts} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="optimized">
+          <Card>
+            <CardContent className="pt-4">
+              <OptimizedProductsTab products={filteredProducts} />
             </CardContent>
           </Card>
         </TabsContent>

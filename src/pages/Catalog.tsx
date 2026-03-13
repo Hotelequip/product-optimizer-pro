@@ -1157,3 +1157,103 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
     </div>
   );
 }
+
+function InlineProductForm({
+  product,
+  categories,
+  selectedCatalogId,
+  onSubmit,
+}: {
+  product: Product | null;
+  categories: { id: string; name: string }[];
+  selectedCatalogId: string;
+  onSubmit: (data: any) => Promise<void>;
+}) {
+  const [name, setName] = useState(product?.name || "");
+  const [sku, setSku] = useState(product?.sku || "");
+  const [cost, setCost] = useState(product?.cost?.toString() || "0");
+  const [price, setPrice] = useState(product?.price?.toString() || "0");
+  const [stock, setStock] = useState(product?.stock?.toString() || "0");
+  const [brand, setBrand] = useState(product?.brand || "");
+  const [description, setDescription] = useState(product?.description || "");
+  const [categoryId, setCategoryId] = useState(product?.category_id || "");
+  const [supplierUrl, setSupplierUrl] = useState(product?.supplier_url || "");
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      const catalogId = selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized" ? selectedCatalogId : null;
+      await onSubmit({
+        name: name.trim(),
+        sku: sku.trim() || null,
+        cost: parseFloat(cost) || 0,
+        price: parseFloat(price) || 0,
+        stock: parseInt(stock) || 0,
+        brand: brand.trim() || null,
+        description: description.trim() || null,
+        category_id: categoryId || null,
+        supplier_url: supplierUrl.trim() || null,
+        catalog_id: product ? undefined : catalogId,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="col-span-2 space-y-1">
+          <Label>Nome *</Label>
+          <Input value={name} onChange={e => setName(e.target.value)} required />
+        </div>
+        <div className="space-y-1">
+          <Label>SKU</Label>
+          <Input value={sku} onChange={e => setSku(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label>Marca</Label>
+          <Input value={brand} onChange={e => setBrand(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label>Custo</Label>
+          <Input type="number" step="0.01" value={cost} onChange={e => setCost(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label>Preço</Label>
+          <Input type="number" step="0.01" value={price} onChange={e => setPrice(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label>Stock</Label>
+          <Input type="number" value={stock} onChange={e => setStock(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label>Categoria</Label>
+          <Select value={categoryId} onValueChange={setCategoryId}>
+            <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+            <SelectContent>
+              {categories.map(c => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="col-span-2 space-y-1">
+          <Label>URL Fornecedor</Label>
+          <Input value={supplierUrl} onChange={e => setSupplierUrl(e.target.value)} placeholder="https://..." />
+        </div>
+        <div className="col-span-2 space-y-1">
+          <Label>Descrição</Label>
+          <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} />
+        </div>
+      </div>
+      <Button type="submit" className="w-full" disabled={!name.trim() || saving}>
+        {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+        {product ? "Guardar" : "Criar Produto"}
+      </Button>
+    </form>
+  );
+}

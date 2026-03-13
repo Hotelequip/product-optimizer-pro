@@ -60,8 +60,9 @@ export function useUpdateProduct() {
       // Record price change if price changed
       const { data: existing } = await supabase.from("products").select("price").eq("id", id).single();
       if (existing && updates.price !== undefined && existing.price !== updates.price) {
-        await supabase.from("price_history").insert({
+        await supabase.from("price_history").insert([{
           product_id: id,
+          user_id: user!.id,
           old_price: existing.price,
           new_price: updates.price,
         });

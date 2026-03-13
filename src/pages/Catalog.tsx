@@ -56,7 +56,7 @@ export default function Catalog() {
   const [fetchingImages, setFetchingImages] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [supplierBaseUrl, setSupplierBaseUrl] = useState("");
-  const [fetchProgress, setFetchProgress] = useState<{ current: number; total: number; currentName: string; found: number } | null>(null);
+  const [fetchProgress, setFetchProgress] = useState<{ current: number; total: number; currentName: string; found: number; catalogName?: string } | null>(null);
   const cancelRef = useRef(false);
 
   // Filter products by selected catalog
@@ -456,6 +456,11 @@ export default function Catalog() {
     cancelRef.current = false;
     setFetchingImages(true);
     setImageDialogOpen(false);
+    const currentCatalogName = selectedCatalogId === "all"
+      ? "Todos os catálogos"
+      : selectedCatalogId === "uncategorized"
+      ? "Sem pasta"
+      : catalogs.find(c => c.id === selectedCatalogId)?.name || "Catálogo";
     setFetchProgress(null);
     try {
       let query = supabase
@@ -501,6 +506,7 @@ export default function Catalog() {
           total: totalSteps,
           currentName: batch[0].name,
           found: foundImages,
+          catalogName: currentCatalogName,
         });
 
         const { data, error } = await supabase.functions.invoke("web-scrape-product", {
@@ -521,7 +527,7 @@ export default function Catalog() {
         }
 
         currentStep += batch.length;
-        setFetchProgress({ current: currentStep, total: totalSteps, currentName: "", found: foundImages });
+        setFetchProgress({ current: currentStep, total: totalSteps, currentName: "", found: foundImages, catalogName: currentCatalogName });
         // Refresh products after each batch for visual feedback
         queryClient.invalidateQueries({ queryKey: ["products"] });
       }
@@ -536,6 +542,7 @@ export default function Catalog() {
           total: totalSteps,
           currentName: `Enriquecendo: ${batch[0].name}`,
           found: foundImages + enriched,
+          catalogName: currentCatalogName,
         });
 
         const { data, error } = await supabase.functions.invoke("web-scrape-product", {
@@ -912,6 +919,9 @@ export default function Catalog() {
               <div className="flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin text-primary" />
                 <span className="font-medium">
+                  {fetchProgress.catalogName && (
+                    <span className="text-primary mr-1">[{fetchProgress.catalogName}]</span>
+                  )}
                   {fetchProgress.current}/{fetchProgress.total} produto(s)
                 </span>
               </div>

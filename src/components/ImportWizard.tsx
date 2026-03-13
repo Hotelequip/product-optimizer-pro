@@ -451,8 +451,16 @@ export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWi
                     <td className="p-2">
                       <Checkbox checked={selectedIds.has(p._idx)} onCheckedChange={() => toggleOne(p._idx)} />
                     </td>
-                    <td className="p-2 font-mono text-muted-foreground">{p.sku || "—"}</td>
-                    <td className="p-2 max-w-[200px] truncate font-medium">{p.name}</td>
+                    <td className="p-2 max-w-[200px] font-medium">
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate">{p.name}</span>
+                        {isExistingProduct(p) ? (
+                          <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-accent text-accent-foreground font-medium">Atualizar</span>
+                        ) : (
+                          <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium">Novo</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="p-2 text-right">{p.cost ? `€${p.cost.toFixed(2)}` : "—"}</td>
                     <td className="p-2 text-right">{p.price ? `€${p.price.toFixed(2)}` : "—"}</td>
                     <td className="p-2 text-right">{p.stock || "—"}</td>

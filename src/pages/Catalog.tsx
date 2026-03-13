@@ -35,6 +35,8 @@ export default function Catalog() {
   const [newCatalogName, setNewCatalogName] = useState("");
   const [showNewCatalogInput, setShowNewCatalogInput] = useState(false);
   const [catalogSearch, setCatalogSearch] = useState("");
+  const [editingCatalogId, setEditingCatalogId] = useState<string | null>(null);
+  const [editingCatalogName, setEditingCatalogName] = useState("");
 
   // Filter products by selected catalog
   const filteredProducts = useMemo(() => {

@@ -506,6 +506,7 @@ export default function Catalog() {
           total: totalSteps,
           currentName: batch[0].name,
           found: foundImages,
+          catalogName: currentCatalogName,
         });
 
         const { data, error } = await supabase.functions.invoke("web-scrape-product", {

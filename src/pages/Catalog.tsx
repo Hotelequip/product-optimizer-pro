@@ -448,69 +448,126 @@ export default function Catalog() {
     setWizardOpen(true);
   };
 
-  // Fetch images for products missing image_url
-  const fetchMissingImages = async (baseUrl?: string) => {
+  // Fetch images + enrich data for products
+  const fetchAndEnrich = async (baseUrl?: string, alsoEnrich?: boolean) => {
     if (!user || fetchingImages) return;
     setFetchingImages(true);
     setImageDialogOpen(false);
     try {
-      const { data: noImageProducts } = await supabase
+      // Filter by selected catalog
+      let query = supabase
         .from("products")
-        .select("id, name, sku, supplier_url")
-        .eq("user_id", user.id)
-        .is("image_url", null)
-        .limit(30);
+        .select("id, name, sku, supplier_url, image_url, description")
+        .eq("user_id", user.id);
+      
+      if (selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized") {
+        query = query.eq("catalog_id", selectedCatalogId);
+      } else if (selectedCatalogId === "uncategorized") {
+        query = query.is("catalog_id", null);
+      }
 
-      if (!noImageProducts || noImageProducts.length === 0) {
-        toast({ title: "Todos os produtos já têm imagem", description: "Nenhum produto sem imagem encontrado." });
+      const { data: allCatalogProducts } = await query.limit(50);
+
+      if (!allCatalogProducts || allCatalogProducts.length === 0) {
+        toast({ title: "Nenhum produto encontrado", description: "Esta pasta não tem produtos." });
         setFetchingImages(false);
         return;
       }
 
+      // Products without images
+      const noImageProducts = allCatalogProducts.filter(p => !p.image_url);
+      // Products missing data (no description)
+      const noDataProducts = alsoEnrich ? allCatalogProducts.filter(p => !p.description) : [];
+
+      if (noImageProducts.length === 0 && noDataProducts.length === 0) {
+        toast({ title: "Tudo completo!", description: "Todos os produtos já têm imagem e dados." });
+        setFetchingImages(false);
+        return;
+      }
+
+      const parts: string[] = [];
+      if (noImageProducts.length > 0) parts.push(`${noImageProducts.length} imagem(ns)`);
+      if (noDataProducts.length > 0) parts.push(`${noDataProducts.length} a enriquecer`);
+
       toast({
-        title: `A procurar imagens para ${noImageProducts.length} produto(s)...`,
+        title: `A processar ${parts.join(" · ")}...`,
         description: baseUrl ? `No site ${baseUrl}` : "Via pesquisa web. Isto pode demorar.",
       });
 
-      const { data, error } = await supabase.functions.invoke("web-scrape-product", {
-        body: {
-          action: "fetch_images",
-          products: noImageProducts,
-          base_supplier_url: baseUrl || null,
-        },
-      });
+      // Step 1: Fetch images
+      let foundImages = 0;
+      if (noImageProducts.length > 0) {
+        const { data, error } = await supabase.functions.invoke("web-scrape-product", {
+          body: {
+            action: "fetch_images",
+            products: noImageProducts.map(p => ({ id: p.id, name: p.name, sku: p.sku, supplier_url: p.supplier_url })),
+            base_supplier_url: baseUrl || null,
+          },
+        });
 
-      if (error || !data?.success) {
-        console.warn("Image fetch failed:", error || data?.error);
-        toast({ title: "Erro ao procurar imagens", description: data?.error || "Tente novamente.", variant: "destructive" });
-        setFetchingImages(false);
-        return;
-      }
-
-      const results = data.results || [];
-      let foundCount = 0;
-
-      for (const r of results) {
-        if (r.success && r.image_url) {
-          await supabase
-            .from("products")
-            .update({ image_url: r.image_url })
-            .eq("id", r.product_id);
-          foundCount++;
+        if (!error && data?.success) {
+          for (const r of (data.results || [])) {
+            if (r.success && r.image_url) {
+              await supabase.from("products").update({ image_url: r.image_url }).eq("id", r.product_id);
+              foundImages++;
+            }
+          }
+        } else {
+          console.warn("Image fetch failed:", error || data?.error);
         }
       }
 
-      if (foundCount > 0) {
-        queryClient.invalidateQueries({ queryKey: ["products"] });
-        toast({
-          title: `${foundCount} imagem(ns) encontrada(s)`,
-          description: "Imagens de produtos atualizadas automaticamente.",
+      // Step 2: Enrich data for products missing descriptions
+      let enriched = 0;
+      if (noDataProducts.length > 0) {
+        const { data, error } = await supabase.functions.invoke("web-scrape-product", {
+          body: {
+            action: "bulk_enrich",
+            products: noDataProducts.map(p => ({ id: p.id, name: p.name, sku: p.sku, supplier_url: p.supplier_url || baseUrl || null })),
+            base_supplier_url: baseUrl || null,
+          },
         });
-      } else {
-        toast({ title: "Nenhuma imagem encontrada", description: "Não foi possível encontrar imagens para os produtos." });
+
+        if (!error && data?.success) {
+          for (const r of (data.results || [])) {
+            if (r.success && r.enriched) {
+              const updates: Record<string, unknown> = {};
+              if (r.enriched.description) updates.description = r.enriched.description;
+              if (r.enriched.short_description) updates.short_description = r.enriched.short_description;
+              if (r.enriched.brand) updates.brand = r.enriched.brand;
+              if (r.enriched.seo_title) updates.seo_title = r.enriched.seo_title;
+              if (r.enriched.meta_description) updates.meta_description = r.enriched.meta_description;
+              if (r.enriched.tags?.length) updates.tags = r.enriched.tags;
+              if (r.enriched.specifications?.length) updates.specifications = r.enriched.specifications;
+              if (r.enriched.suggested_category) updates.optimized_title = r.enriched.suggested_category;
+
+              if (Object.keys(updates).length > 0) {
+                updates.last_enriched_at = new Date().toISOString();
+                updates.enrichment_phase = 1;
+                await supabase.from("products").update(updates as any).eq("id", r.product_id);
+                enriched++;
+              }
+            }
+          }
+        } else {
+          console.warn("Enrichment failed:", error || data?.error);
+        }
       }
-    } catch (e) {
-      console.warn("Background image fetch error:", e);
+
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+
+      const summary: string[] = [];
+      if (foundImages > 0) summary.push(`${foundImages} imagem(ns)`);
+      if (enriched > 0) summary.push(`${enriched} produto(s) enriquecido(s)`);
+      
+      if (summary.length > 0) {
+        toast({ title: `Concluído: ${summary.join(" · ")}`, description: "Dados atualizados com sucesso." });
+      } else {
+        toast({ title: "Sem resultados", description: "Não foi possível encontrar dados adicionais." });
+      }
+    } catch (e: any) {
+      console.warn("Fetch & enrich error:", e);
+      toast({ title: "Erro", description: e.message || "Erro ao processar.", variant: "destructive" });
     } finally {
       setFetchingImages(false);
     }
@@ -986,15 +1043,15 @@ export default function Catalog() {
         </DialogContent>
       </Dialog>
 
-      {/* Image fetch dialog */}
+      {/* Image fetch + enrich dialog */}
       <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Buscar Imagens de Produtos</DialogTitle>
+            <DialogTitle>Buscar Imagens e Enriquecer Dados</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Indique o URL base do fornecedor para procurar imagens dos produtos.
+              Procura imagens e informação adicional (descrições, especificações, SEO) para os produtos da pasta selecionada.
             </p>
             <div className="space-y-2">
               <Label>URL do Fornecedor (opcional)</Label>
@@ -1003,15 +1060,27 @@ export default function Catalog() {
                 value={supplierBaseUrl}
                 onChange={(e) => setSupplierBaseUrl(e.target.value)}
               />
+              <p className="text-xs text-muted-foreground">
+                Melhora a precisão da busca de imagens e dados
+              </p>
             </div>
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setImageDialogOpen(false)}>Cancelar</Button>
+            <div className="flex flex-col gap-2">
               <Button
                 disabled={fetchingImages}
-                onClick={() => fetchMissingImages(supplierBaseUrl.trim() || undefined)}
+                onClick={() => fetchAndEnrich(supplierBaseUrl.trim() || undefined, true)}
+                className="w-full"
+              >
+                {fetchingImages ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                Buscar Imagens + Enriquecer Dados
+              </Button>
+              <Button
+                variant="outline"
+                disabled={fetchingImages}
+                onClick={() => fetchAndEnrich(supplierBaseUrl.trim() || undefined, false)}
+                className="w-full"
               >
                 {fetchingImages ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
-                Iniciar Busca
+                Apenas Imagens
               </Button>
             </div>
           </div>

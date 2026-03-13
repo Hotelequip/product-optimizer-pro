@@ -55,6 +55,7 @@ export function useCreateProduct() {
 export function useUpdateProduct() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<Product> & { id: string }) => {
       // Record price change if price changed

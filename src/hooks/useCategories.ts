@@ -29,7 +29,7 @@ export function useCreateCategory() {
   const { user } = useAuth();
   return useMutation({
     mutationFn: async (name: string) => {
-      const { data, error } = await supabase.from("categories").insert({ name }).select().single();
+      const { data, error } = await supabase.from("categories").insert([{ name, user_id: user!.id }]).select().single();
       if (error) throw error;
       return data;
     },

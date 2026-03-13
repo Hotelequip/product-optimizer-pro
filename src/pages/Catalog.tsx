@@ -1371,8 +1371,7 @@ function ImageGalleryTab({ products }: { products: Product[] }) {
       const { data, error } = await supabase.functions.invoke("ai-enrich", {
         body: {
           action: "generate_image",
-          product_id: product.id,
-          prompt,
+          product: { name: product.name, description: product.description },
         },
       });
 

@@ -361,6 +361,14 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
 
   return (
     <div className="space-y-3">
+      {/* Export button - always visible */}
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={exportWooCommerceExcel} className="gap-1.5">
+          <FileSpreadsheet className="h-3.5 w-3.5" />
+          Exportar Excel WooCommerce
+          {selectedProducts.size > 0 && ` (${selectedProducts.size})`}
+        </Button>
+      </div>
       {selectedProducts.size > 0 && (
         <div className="space-y-2">
           <div className="flex items-center gap-3 p-2 bg-muted/50 rounded-lg border flex-wrap">

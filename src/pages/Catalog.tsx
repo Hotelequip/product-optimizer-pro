@@ -518,6 +518,10 @@ export default function Catalog() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="files">
+          <CatalogFilesTab selectedCatalogId={selectedCatalogId} />
+        </TabsContent>
+
         <TabsContent value="sync">
           <WooCommerceSync />
         </TabsContent>

@@ -22,6 +22,11 @@ export interface Product {
   specifications: any[] | null;
   tags: string[] | null;
   last_enriched_at: string | null;
+  slug: string | null;
+  seo_score: number;
+  enrichment_phase: number;
+  short_description: string | null;
+  optimized_title: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -47,8 +52,8 @@ export function useCreateProduct() {
   const { toast } = useToast();
   const { user } = useAuth();
   return useMutation({
-    mutationFn: async (product: Omit<Product, "id" | "user_id" | "created_at" | "updated_at" | "last_enriched_at" | "specifications" | "tags" | "seo_title" | "meta_description" | "brand" | "supplier_url" | "sku"> & { sku?: string | null; supplier_url?: string | null; brand?: string | null }) => {
-      const { data, error } = await supabase.from("products").insert([{ ...product, user_id: user!.id }]).select().single();
+    mutationFn: async (product: { name: string; description?: string | null; category_id?: string | null; cost?: number; price?: number; stock?: number; status?: string; image_url?: string | null; sku?: string | null; supplier_url?: string | null; brand?: string | null; slug?: string | null; seo_score?: number; enrichment_phase?: number; short_description?: string | null; optimized_title?: string | null }) => {
+      const { data, error } = await supabase.from("products").insert([{ ...product, user_id: user!.id } as any]).select().single();
       if (error) throw error;
       return data;
     },

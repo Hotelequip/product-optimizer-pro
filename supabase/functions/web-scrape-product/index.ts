@@ -312,9 +312,11 @@ Return JSON:
                   headers: aiHeaders,
                   body: JSON.stringify({
                     model: 'google/gemini-3-flash-preview',
-                    messages: [{
+                    messages: [
+                      { role: 'system', content: 'You are an expert WooCommerce product copywriter. Generate professional product content in Portuguese (Portugal). Always return valid JSON.' },
+                      {
                       role: 'user',
-                      content: `Extract product data for "${product.name}"${product.sku ? ` (SKU: ${product.sku})` : ''} from:\n${content.substring(0, 8000)}\n\nReturn JSON: {"description":"Portuguese desc","brand":"","specifications":[{"name":"","value":""}],"suggested_price":null,"tags":[],"seo_title":"","meta_description":""}`,
+                      content: `Extract and enrich product data for "${product.name}"${product.sku ? ` (SKU: ${product.sku})` : ''} from this supplier page content:\n${content.substring(0, 8000)}\n\nReturn JSON with ALL fields:\n{"optimized_title":"SEO-optimized title (max 70 chars, include brand/key feature)","description":"Full HTML description for WooCommerce using <h2>,<h3>,<p>,<ul>,<li>,<table> tags. Include: selling paragraph, benefits, technical specs table. Min 150 words.","short_description":"Concise HTML (2-3 sentences) with <p> and <strong> tags for WooCommerce product summary.","brand":"","specifications":[{"name":"","value":""}],"suggested_price":null,"tags":[],"seo_title":"SEO title max 60 chars","meta_description":"Meta desc max 160 chars"}`,
                     }],
                   }),
                 });
@@ -350,9 +352,11 @@ Return JSON:
                   headers: aiHeaders,
                   body: JSON.stringify({
                     model: 'google/gemini-3-flash-preview',
-                    messages: [{
+                    messages: [
+                      { role: 'system', content: 'You are an expert WooCommerce product copywriter. Generate professional product content in Portuguese (Portugal). Always return valid JSON.' },
+                      {
                       role: 'user',
-                      content: `Extract product data for "${product.name}"${product.sku ? ` (SKU: ${product.sku})` : ''} from:\n${webContent.substring(0, 8000)}\n\nReturn JSON: {"description":"Portuguese desc","brand":"","specifications":[{"name":"","value":""}],"suggested_price":null,"tags":[],"seo_title":"","meta_description":""}`,
+                      content: `Extract and enrich product data for "${product.name}"${product.sku ? ` (SKU: ${product.sku})` : ''} from web search results:\n${webContent.substring(0, 8000)}\n\nReturn JSON with ALL fields:\n{"optimized_title":"SEO-optimized title (max 70 chars, include brand/key feature)","description":"Full HTML description for WooCommerce using <h2>,<h3>,<p>,<ul>,<li>,<table> tags. Include: selling paragraph, benefits, technical specs table. Min 150 words.","short_description":"Concise HTML (2-3 sentences) with <p> and <strong> tags for WooCommerce product summary.","brand":"","specifications":[{"name":"","value":""}],"suggested_price":null,"tags":[],"seo_title":"SEO title max 60 chars","meta_description":"Meta desc max 160 chars"}`,
                     }],
                   }),
                 });

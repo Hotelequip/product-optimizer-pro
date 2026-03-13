@@ -119,14 +119,16 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
         body: { action: "enrich", product: { name: product.name, description: product.description, cost: product.cost, price: product.price, sku: product.sku, brand: product.brand } },
       });
       if (error) throw error;
-      if (data.success && data.enriched?.description) {
-        const slug = slugify(data.enriched.seo_title || product.name);
+      if (data.success && data.enriched) {
+        const slug = slugify(data.enriched.seo_title || data.enriched.optimized_title || product.name);
         await updateProduct.mutateAsync({
           id: product.id,
-          description: data.enriched.description,
-          optimized_title: data.enriched.seo_title || null,
+          description: data.enriched.description || product.description,
+          optimized_title: data.enriched.optimized_title || data.enriched.seo_title || null,
           meta_description: data.enriched.meta_description || null,
           short_description: data.enriched.short_description || null,
+          seo_title: data.enriched.seo_title || null,
+          tags: data.enriched.tags || null,
           slug,
           enrichment_phase: Math.min((product.enrichment_phase || 0) + 1, 3),
           last_enriched_at: new Date().toISOString(),

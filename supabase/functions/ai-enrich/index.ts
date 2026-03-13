@@ -75,23 +75,28 @@ Deno.serve(async (req) => {
     // ACTION: enrich (single product text enrichment)
     // ========================
     if (action === 'enrich') {
-      const prompt = `You are a product data enrichment specialist for e-commerce. 
-Given this product information, enrich it with:
-1. A compelling SEO-optimized description in Portuguese (Portugal)
-2. Key attributes/specifications
-3. Suggested category
-4. SEO title and meta description
+      const prompt = `You are an expert e-commerce product copywriter for WooCommerce stores.
+Given this product information, generate professional content in Portuguese (Portugal):
 
 Product: ${JSON.stringify(product)}
 
-Return a JSON object with:
+You MUST return a JSON object with ALL these fields:
 {
-  "description": "Enhanced description in Portuguese",
-  "seo_title": "SEO optimized title (max 60 chars)",
-  "meta_description": "Meta description (max 160 chars)",
+  "optimized_title": "Compelling, SEO-optimized product title (max 70 chars). Include brand and key feature.",
+  "description": "Full HTML product description for WooCommerce. Use <h2>, <h3>, <p>, <ul>, <li> tags. Include: 1) Opening paragraph selling the product, 2) Key benefits section, 3) Technical specifications table using <table><tr><td> format, 4) Usage/application notes if relevant. Minimum 150 words.",
+  "short_description": "Concise HTML summary (2-3 sentences) highlighting the main selling points. Use <p> and <strong> tags. This appears next to the product image in WooCommerce.",
+  "seo_title": "SEO title for search engines (max 60 chars with primary keyword)",
+  "meta_description": "Meta description (max 160 chars, compelling, with call-to-action)",
+  "tags": ["relevant", "search", "tags"],
   "attributes": [{"name": "attr_name", "value": "attr_value"}],
   "suggested_category": "category name"
-}`;
+}
+
+IMPORTANT: 
+- Description must be rich HTML ready for WooCommerce, NOT plain text
+- Include technical specs as an HTML table when possible
+- Short description must be concise but persuasive
+- All text in Portuguese (Portugal)`;
 
       const data = await callAI(LOVABLE_API_KEY, 'google/gemini-3-flash-preview', [
         { role: 'system', content: 'You are an e-commerce product enrichment AI. Return only valid JSON.' },

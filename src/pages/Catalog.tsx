@@ -792,7 +792,11 @@ export default function Catalog() {
                   variant="ghost"
                   size="sm"
                   className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground"
-                  onClick={(e) => { e.stopPropagation(); setEditingCatalogId(cat.id); setEditingCatalogName(cat.name); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditCatalogData({ id: cat.id, name: cat.name, supplier_url: (cat as any).supplier_url || "" });
+                    setEditCatalogDialogOpen(true);
+                  }}
                 >
                   <Pencil className="h-3 w-3" />
                 </Button>

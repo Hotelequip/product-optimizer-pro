@@ -56,6 +56,7 @@ export default function Catalog() {
   const [fetchingImages, setFetchingImages] = useState(false);
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [supplierBaseUrl, setSupplierBaseUrl] = useState("");
+  const [fetchProgress, setFetchProgress] = useState<{ current: number; total: number; currentName: string; found: number } | null>(null);
 
   // Filter products by selected catalog
   const filteredProducts = useMemo(() => {

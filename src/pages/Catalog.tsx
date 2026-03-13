@@ -180,6 +180,8 @@ export default function Catalog() {
           )}
         </CardContent>
       </Card>
+
+      <PdfImport />
     </div>
   );
 }

@@ -508,18 +508,33 @@ export default function Catalog() {
             : `Catálogo ${catalogs.find(c => c.id === selectedCatalogId)?.name || ""}`}
         </h1>
         <div className="flex gap-2">
-          <label>
-            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileImport} disabled={importing} />
-            <Button variant="outline" asChild disabled={importing}>
-              <span>{importing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}Excel/CSV</span>
-            </Button>
-          </label>
-          <label>
-            <input type="file" accept=".pdf" className="hidden" onChange={handlePdfImport} disabled={importing} />
-            <Button variant="outline" asChild disabled={importing}>
-              <span><FileUp className="mr-2 h-4 w-4" />PDF</span>
-            </Button>
-          </label>
+          <Button variant="outline" disabled={importing} onClick={() => {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = ".xlsx,.xls,.csv";
+            input.multiple = true;
+            input.onchange = (ev) => {
+              const selected = Array.from((ev.target as HTMLInputElement).files || []);
+              if (selected.length > 0) { setWizardFiles(selected); setWizardOpen(true); }
+            };
+            input.click();
+          }}>
+            {importing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+            Excel/CSV
+          </Button>
+          <Button variant="outline" disabled={importing} onClick={() => {
+            const input = document.createElement("input");
+            input.type = "file";
+            input.accept = ".pdf";
+            input.multiple = true;
+            input.onchange = (ev) => {
+              const selected = Array.from((ev.target as HTMLInputElement).files || []);
+              if (selected.length > 0) { setWizardFiles(selected); setWizardOpen(true); }
+            };
+            input.click();
+          }}>
+            <FileUp className="mr-2 h-4 w-4" />PDF
+          </Button>
           <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingProduct(null); }}>
             <DialogTrigger asChild>
               <Button><Plus className="mr-2 h-4 w-4" />Novo Produto</Button>

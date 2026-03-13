@@ -50,6 +50,8 @@ export default function Catalog() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardFiles, setWizardFiles] = useState<File[]>([]);
   const [fetchingImages, setFetchingImages] = useState(false);
+  const [imageDialogOpen, setImageDialogOpen] = useState(false);
+  const [supplierBaseUrl, setSupplierBaseUrl] = useState("");
 
   // Filter products by selected catalog
   const filteredProducts = useMemo(() => {
@@ -442,9 +444,10 @@ export default function Catalog() {
   };
 
   // Fetch images for products missing image_url
-  const fetchMissingImages = async () => {
+  const fetchMissingImages = async (baseUrl?: string) => {
     if (!user || fetchingImages) return;
     setFetchingImages(true);
+    setImageDialogOpen(false);
     try {
       const { data: noImageProducts } = await supabase
         .from("products")
@@ -461,11 +464,15 @@ export default function Catalog() {
 
       toast({
         title: `A procurar imagens para ${noImageProducts.length} produto(s)...`,
-        description: "Isto acontece em segundo plano.",
+        description: baseUrl ? `No site ${baseUrl}` : "Via pesquisa web. Isto pode demorar.",
       });
 
       const { data, error } = await supabase.functions.invoke("web-scrape-product", {
-        body: { action: "fetch_images", products: noImageProducts },
+        body: {
+          action: "fetch_images",
+          products: noImageProducts,
+          base_supplier_url: baseUrl || null,
+        },
       });
 
       if (error || !data?.success) {
@@ -608,8 +615,7 @@ export default function Catalog() {
       description: `${files.length} ficheiro(s) associado(s).`,
     });
 
-    // Background: fetch images for products without image_url
-    fetchMissingImages();
+
   };
 
   return (
@@ -665,7 +671,7 @@ export default function Catalog() {
           }}>
             <FileUp className="mr-2 h-4 w-4" />PDF
           </Button>
-          <Button variant="outline" disabled={fetchingImages} onClick={fetchMissingImages}>
+          <Button variant="outline" disabled={fetchingImages} onClick={() => setImageDialogOpen(true)}>
             {fetchingImages ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
             Buscar Imagens
           </Button>
@@ -905,6 +911,41 @@ export default function Catalog() {
         files={wizardFiles}
         onConfirmImport={handleWizardConfirm}
       />
+
+      {/* Image fetch dialog */}
+      <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Buscar Imagens de Produtos</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Indique o URL base do fornecedor para procurar imagens dos produtos. O sistema vai mapear o site e tentar encontrar as imagens por SKU/nome.
+            </p>
+            <div className="space-y-2">
+              <Label>URL do Fornecedor (opcional)</Label>
+              <Input
+                placeholder="https://plasgourmet.com"
+                value={supplierBaseUrl}
+                onChange={(e) => setSupplierBaseUrl(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Ex: https://plasgourmet.com — deixe vazio para pesquisa web genérica
+              </p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setImageDialogOpen(false)}>Cancelar</Button>
+              <Button
+                disabled={fetchingImages}
+                onClick={() => fetchMissingImages(supplierBaseUrl.trim() || undefined)}
+              >
+                {fetchingImages ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
+                Iniciar Busca
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

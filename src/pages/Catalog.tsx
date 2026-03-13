@@ -373,6 +373,7 @@ export default function Catalog() {
       <Tabs defaultValue="spreadsheet" className="space-y-4">
         <TabsList>
           <TabsTrigger value="spreadsheet" className="gap-2"><Sheet className="h-4 w-4" />Planilha</TabsTrigger>
+          <TabsTrigger value="images" className="gap-2"><ImageIcon className="h-4 w-4" />Imagens</TabsTrigger>
           <TabsTrigger value="sync">🔄 WooCommerce</TabsTrigger>
         </TabsList>
 
@@ -395,6 +396,19 @@ export default function Catalog() {
               ) : (
                 <SpreadsheetEditor products={filteredProducts} />
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="images">
+          <Card>
+            <CardHeader>
+              <p className="text-xs text-muted-foreground">
+                🖼️ Visualize e gere imagens para os seus produtos. Clique em "Gerar" para criar imagens com IA.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <ProductImageGallery products={filteredProducts} />
             </CardContent>
           </Card>
         </TabsContent>

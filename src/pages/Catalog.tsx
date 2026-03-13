@@ -10,9 +10,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Pencil, Trash2, Search, Upload, FileUp } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Pencil, Trash2, Search, Upload, LayoutGrid, Sheet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PdfImport } from "@/components/PdfImport";
+import { SpreadsheetEditor } from "@/components/SpreadsheetEditor";
+import { WooCommerceSync } from "@/components/WooCommerceSync";
 
 const statusLabels: Record<string, string> = { active: "Ativo", inactive: "Inativo", draft: "Rascunho" };
 const statusVariants: Record<string, "default" | "secondary" | "outline"> = { active: "default", inactive: "secondary", draft: "outline" };
@@ -79,7 +82,7 @@ export default function Catalog() {
           <label>
             <input type="file" accept=".csv" className="hidden" onChange={handleCSVImport} />
             <Button variant="outline" asChild>
-              <span><Upload className="mr-2 h-4 w-4" />Importar CSV</span>
+              <span><Upload className="mr-2 h-4 w-4" />CSV</span>
             </Button>
           </label>
           <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingProduct(null); }}>
@@ -108,80 +111,129 @@ export default function Catalog() {
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap gap-3">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Buscar produto..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-            </div>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-[140px]"><SelectValue placeholder="Status" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="active">Ativo</SelectItem>
-                <SelectItem value="inactive">Inativo</SelectItem>
-                <SelectItem value="draft">Rascunho</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filterCategory} onValueChange={setFilterCategory}>
-              <SelectTrigger className="w-[160px]"><SelectValue placeholder="Categoria" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas</SelectItem>
-                {categories.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <p className="text-muted-foreground text-sm">Carregando...</p>
-          ) : filtered.length === 0 ? (
-            <p className="text-muted-foreground text-sm text-center py-8">Nenhum produto encontrado</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Custo</TableHead>
-                  <TableHead>Preço</TableHead>
-                  <TableHead>Margem</TableHead>
-                  <TableHead>Estoque</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((p) => {
-                  const margin = p.cost > 0 ? ((p.price - p.cost) / p.cost) * 100 : 0;
-                  return (
-                    <TableRow key={p.id}>
-                      <TableCell className="font-medium">{p.name}</TableCell>
-                      <TableCell>R$ {Number(p.cost).toFixed(2)}</TableCell>
-                      <TableCell>R$ {Number(p.price).toFixed(2)}</TableCell>
-                      <TableCell className={margin < 0 ? "text-destructive" : ""}>{margin.toFixed(1)}%</TableCell>
-                      <TableCell className={p.stock < 10 ? "text-destructive font-medium" : ""}>{p.stock}</TableCell>
-                      <TableCell><Badge variant={statusVariants[p.status]}>{statusLabels[p.status]}</Badge></TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="icon" onClick={() => { setEditingProduct(p); setDialogOpen(true); }}>
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => deleteProduct.mutate(p.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="spreadsheet" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="spreadsheet" className="gap-2"><Sheet className="h-4 w-4" />Planilha</TabsTrigger>
+          <TabsTrigger value="cards" className="gap-2"><LayoutGrid className="h-4 w-4" />Tabela</TabsTrigger>
+          <TabsTrigger value="sync">🔄 WooCommerce</TabsTrigger>
+          <TabsTrigger value="import">📄 Importar PDF</TabsTrigger>
+        </TabsList>
 
-      <PdfImport />
+        <TabsContent value="spreadsheet">
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap gap-3">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Buscar..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+                </div>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="w-[130px]"><SelectValue placeholder="Status" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="active">Ativo</SelectItem>
+                    <SelectItem value="inactive">Inativo</SelectItem>
+                    <SelectItem value="draft">Rascunho</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">💡 Duplo clique numa célula para editar. Use os botões IA para enriquecer descrições e gerar imagens.</p>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <p className="text-muted-foreground text-sm">Carregando...</p>
+              ) : filtered.length === 0 ? (
+                <p className="text-muted-foreground text-sm text-center py-8">Nenhum produto encontrado</p>
+              ) : (
+                <SpreadsheetEditor products={filtered} />
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="cards">
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap gap-3">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input placeholder="Buscar produto..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+                </div>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="w-[140px]"><SelectValue placeholder="Status" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="active">Ativo</SelectItem>
+                    <SelectItem value="inactive">Inativo</SelectItem>
+                    <SelectItem value="draft">Rascunho</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={filterCategory} onValueChange={setFilterCategory}>
+                  <SelectTrigger className="w-[160px]"><SelectValue placeholder="Categoria" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    {categories.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <p className="text-muted-foreground text-sm">Carregando...</p>
+              ) : filtered.length === 0 ? (
+                <p className="text-muted-foreground text-sm text-center py-8">Nenhum produto encontrado</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>Custo</TableHead>
+                      <TableHead>Preço</TableHead>
+                      <TableHead>Margem</TableHead>
+                      <TableHead>Estoque</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filtered.map((p) => {
+                      const margin = p.cost > 0 ? ((p.price - p.cost) / p.cost) * 100 : 0;
+                      return (
+                        <TableRow key={p.id}>
+                          <TableCell className="font-medium">{p.name}</TableCell>
+                          <TableCell>R$ {Number(p.cost).toFixed(2)}</TableCell>
+                          <TableCell>R$ {Number(p.price).toFixed(2)}</TableCell>
+                          <TableCell className={margin < 0 ? "text-destructive" : ""}>{margin.toFixed(1)}%</TableCell>
+                          <TableCell className={p.stock < 10 ? "text-destructive font-medium" : ""}>{p.stock}</TableCell>
+                          <TableCell><Badge variant={statusVariants[p.status]}>{statusLabels[p.status]}</Badge></TableCell>
+                          <TableCell className="text-right">
+                            <Button variant="ghost" size="icon" onClick={() => { setEditingProduct(p); setDialogOpen(true); }}>
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => deleteProduct.mutate(p.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="sync">
+          <WooCommerceSync />
+        </TabsContent>
+
+        <TabsContent value="import">
+          <PdfImport />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

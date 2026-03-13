@@ -679,7 +679,7 @@ export default function Catalog() {
           <Button variant="outline" disabled={fetchingImages} onClick={() => {
             // Pre-fill with current catalog's supplier URL if available
             const currentCatalog = catalogs.find(c => c.id === selectedCatalogId);
-            setSupplierBaseUrl((currentCatalog as any)?.supplier_url || "");
+            setSupplierBaseUrl(currentCatalog?.supplier_url || "");
             setImageDialogOpen(true);
           }}>
             {fetchingImages ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
@@ -799,7 +799,7 @@ export default function Catalog() {
                   className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setEditCatalogData({ id: cat.id, name: cat.name, supplier_url: (cat as any).supplier_url || "" });
+                    setEditCatalogData({ id: cat.id, name: cat.name, supplier_url: cat.supplier_url || "" });
                     setEditCatalogDialogOpen(true);
                   }}
                 >

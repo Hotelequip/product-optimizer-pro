@@ -3,6 +3,7 @@ import { useProducts, useCreateProduct, useUpdateProduct, Product } from "@/hook
 import { useCategories } from "@/hooks/useCategories";
 import { useCatalogs, useCreateCatalog, useDeleteCatalog, useRenameCatalog } from "@/hooks/useCatalogs";
 import { useAllProductImages, useAddProductImage, useDeleteProductImage, ProductImage } from "@/hooks/useProductImages";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";

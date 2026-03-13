@@ -124,14 +124,19 @@ export type Database = {
           cost: number
           created_at: string
           description: string | null
+          enrichment_phase: number | null
           id: string
           image_url: string | null
           last_enriched_at: string | null
           meta_description: string | null
           name: string
+          optimized_title: string | null
           price: number
+          seo_score: number | null
           seo_title: string | null
+          short_description: string | null
           sku: string | null
+          slug: string | null
           specifications: Json | null
           status: Database["public"]["Enums"]["product_status"]
           stock: number
@@ -146,14 +151,19 @@ export type Database = {
           cost?: number
           created_at?: string
           description?: string | null
+          enrichment_phase?: number | null
           id?: string
           image_url?: string | null
           last_enriched_at?: string | null
           meta_description?: string | null
           name: string
+          optimized_title?: string | null
           price?: number
+          seo_score?: number | null
           seo_title?: string | null
+          short_description?: string | null
           sku?: string | null
+          slug?: string | null
           specifications?: Json | null
           status?: Database["public"]["Enums"]["product_status"]
           stock?: number
@@ -168,14 +178,19 @@ export type Database = {
           cost?: number
           created_at?: string
           description?: string | null
+          enrichment_phase?: number | null
           id?: string
           image_url?: string | null
           last_enriched_at?: string | null
           meta_description?: string | null
           name?: string
+          optimized_title?: string | null
           price?: number
+          seo_score?: number | null
           seo_title?: string | null
+          short_description?: string | null
           sku?: string | null
+          slug?: string | null
           specifications?: Json | null
           status?: Database["public"]["Enums"]["product_status"]
           stock?: number

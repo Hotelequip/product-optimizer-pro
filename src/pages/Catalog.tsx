@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useProducts, useCreateProduct, useUpdateProduct, Product } from "@/hooks/useProducts";
 import { useCategories } from "@/hooks/useCategories";
-import { useCatalogs, useCreateCatalog, useDeleteCatalog, useRenameCatalog } from "@/hooks/useCatalogs";
+import { useCatalogs, useCreateCatalog, useDeleteCatalog, useRenameCatalog, useUpdateCatalog } from "@/hooks/useCatalogs";
 import { useAllProductImages, useAddProductImage, useDeleteProductImage, ProductImage } from "@/hooks/useProductImages";
 import { useCatalogFiles, useAddCatalogFile, useDeleteCatalogFile } from "@/hooks/useCatalogFiles";
 import { Badge } from "@/components/ui/badge";

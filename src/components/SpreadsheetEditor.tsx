@@ -35,6 +35,8 @@ function calcSeoScore(p: Product): number {
 
 export function SpreadsheetEditor({ products }: { products: Product[] }) {
   const updateProduct = useUpdateProduct();
+  const deleteProduct = useDeleteProduct();
+  const { data: catalogs = [] } = useCatalogs();
   const { data: categories = [] } = useCategories();
   const { toast } = useToast();
   const [editingCell, setEditingCell] = useState<EditableCell | null>(null);

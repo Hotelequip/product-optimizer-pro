@@ -46,6 +46,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
   const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
   const [scrapingId, setScrapingId] = useState<string | null>(null);
   const [bulkEnriching, setBulkEnriching] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, label: "" });
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});

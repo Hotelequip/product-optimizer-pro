@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Upload, Sheet, FileUp, Loader2, FolderPlus, Folder, FolderOpen, Trash2, Search, Pencil, ImageIcon } from "lucide-react";
+import { Plus, Upload, Sheet, FileUp, Loader2, FolderPlus, Folder, FolderOpen, Trash2, Search, Pencil, ImageIcon, FileText, Download, File } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { SpreadsheetEditor } from "@/components/SpreadsheetEditor";
 import { WooCommerceSync } from "@/components/WooCommerceSync";

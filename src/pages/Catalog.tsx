@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useProducts, useCreateProduct, useUpdateProduct, Product } from "@/hooks/useProducts";
 import { useCategories } from "@/hooks/useCategories";
-import { useCatalogs, useCreateCatalog, useDeleteCatalog, useRenameCatalog } from "@/hooks/useCatalogs";
+import { useCatalogs, useCreateCatalog, useDeleteCatalog, useRenameCatalog, useUpdateCatalog } from "@/hooks/useCatalogs";
 import { useAllProductImages, useAddProductImage, useDeleteProductImage, ProductImage } from "@/hooks/useProductImages";
 import { useCatalogFiles, useAddCatalogFile, useDeleteCatalogFile } from "@/hooks/useCatalogFiles";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +32,7 @@ export default function Catalog() {
   const createCatalog = useCreateCatalog();
   const deleteCatalog = useDeleteCatalog();
   const renameCatalog = useRenameCatalog();
+  const updateCatalog = useUpdateCatalog();
   const addCatalogFile = useAddCatalogFile();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -42,7 +43,10 @@ export default function Catalog() {
   const [importing, setImporting] = useState(false);
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>("all");
   const [newCatalogName, setNewCatalogName] = useState("");
-  const [showNewCatalogInput, setShowNewCatalogInput] = useState(false);
+  const [newCatalogSupplierUrl, setNewCatalogSupplierUrl] = useState("");
+  const [showNewCatalogDialog, setShowNewCatalogDialog] = useState(false);
+  const [editCatalogDialogOpen, setEditCatalogDialogOpen] = useState(false);
+  const [editCatalogData, setEditCatalogData] = useState<{ id: string; name: string; supplier_url: string }>({ id: "", name: "", supplier_url: "" });
   const [catalogSearch, setCatalogSearch] = useState("");
   const [editingCatalogId, setEditingCatalogId] = useState<string | null>(null);
   const [editingCatalogName, setEditingCatalogName] = useState("");
@@ -72,9 +76,10 @@ export default function Catalog() {
 
   const handleCreateCatalog = async () => {
     if (!newCatalogName.trim()) return;
-    await createCatalog.mutateAsync(newCatalogName.trim());
+    await createCatalog.mutateAsync({ name: newCatalogName.trim(), supplier_url: newCatalogSupplierUrl.trim() || undefined });
     setNewCatalogName("");
-    setShowNewCatalogInput(false);
+    setNewCatalogSupplierUrl("");
+    setShowNewCatalogDialog(false);
   };
 
   const handleDeleteCatalog = async (id: string) => {
@@ -671,7 +676,12 @@ export default function Catalog() {
           }}>
             <FileUp className="mr-2 h-4 w-4" />PDF
           </Button>
-          <Button variant="outline" disabled={fetchingImages} onClick={() => setImageDialogOpen(true)}>
+          <Button variant="outline" disabled={fetchingImages} onClick={() => {
+            // Pre-fill with current catalog's supplier URL if available
+            const currentCatalog = catalogs.find(c => c.id === selectedCatalogId);
+            setSupplierBaseUrl((currentCatalog as any)?.supplier_url || "");
+            setImageDialogOpen(true);
+          }}>
             {fetchingImages ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
             Buscar Imagens
           </Button>
@@ -679,14 +689,13 @@ export default function Catalog() {
             <DialogTrigger asChild>
               <Button><Plus className="mr-2 h-4 w-4" />Novo Produto</Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingProduct ? "Editar Produto" : "Novo Produto"}</DialogTitle>
               </DialogHeader>
-              <ProductForm
+              <InlineProductForm
                 product={editingProduct}
                 categories={categories}
-                catalogs={catalogs}
                 selectedCatalogId={selectedCatalogId}
                 onSubmit={async (data) => {
                   if (editingProduct) {
@@ -788,7 +797,11 @@ export default function Catalog() {
                   variant="ghost"
                   size="sm"
                   className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground"
-                  onClick={(e) => { e.stopPropagation(); setEditingCatalogId(cat.id); setEditingCatalogName(cat.name); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditCatalogData({ id: cat.id, name: cat.name, supplier_url: (cat as any).supplier_url || "" });
+                    setEditCatalogDialogOpen(true);
+                  }}
                 >
                   <Pencil className="h-3 w-3" />
                 </Button>
@@ -808,90 +821,71 @@ export default function Catalog() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {showNewCatalogInput ? (
-          <div className="flex items-center gap-1">
-            <Input
-              placeholder="Nome da pasta..."
-              value={newCatalogName}
-              onChange={e => setNewCatalogName(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") handleCreateCatalog(); if (e.key === "Escape") setShowNewCatalogInput(false); }}
-              className="h-8 w-40 text-sm"
-              autoFocus
-            />
-            <Button size="sm" onClick={handleCreateCatalog} disabled={!newCatalogName.trim()}>
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        ) : (
-          <Button variant="outline" size="sm" onClick={() => setShowNewCatalogInput(true)} className="gap-1.5 border-dashed">
-            <FolderPlus className="h-3.5 w-3.5" />
-            Nova Pasta
-          </Button>
-        )}
+        <Button variant="outline" size="sm" onClick={() => setShowNewCatalogDialog(true)} className="gap-1.5 border-dashed">
+          <FolderPlus className="h-3.5 w-3.5" />
+          Nova Pasta
+        </Button>
       </div>
 
-      <Tabs defaultValue="spreadsheet" className="space-y-4">
+      {/* Tabs */}
+      <Tabs defaultValue="spreadsheet" className="w-full">
         <TabsList>
-          <TabsTrigger value="spreadsheet" className="gap-2"><Sheet className="h-4 w-4" />Planilha</TabsTrigger>
-          <TabsTrigger value="images" className="gap-2"><ImageIcon className="h-4 w-4" />Imagens</TabsTrigger>
-          <TabsTrigger value="files" className="gap-2"><FileText className="h-4 w-4" />Ficheiros</TabsTrigger>
-          <TabsTrigger value="sync">🔄 WooCommerce</TabsTrigger>
+          <TabsTrigger value="spreadsheet" className="gap-1.5">
+            <Sheet className="h-3.5 w-3.5" />Planilha
+          </TabsTrigger>
+          <TabsTrigger value="images" className="gap-1.5">
+            <ImageIcon className="h-3.5 w-3.5" />Imagens
+          </TabsTrigger>
+          <TabsTrigger value="files" className="gap-1.5">
+            <FileText className="h-3.5 w-3.5" />Ficheiros
+          </TabsTrigger>
+          <TabsTrigger value="woo" className="gap-1.5">
+            <Download className="h-3.5 w-3.5" />WooCommerce
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="spreadsheet">
-          {/* Drop zone */}
-          <div
-            className={`mb-4 border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer ${
-              isDragging ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground/50"
-            }`}
-            onDrop={handleDrop}
-            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); }}
-            onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); }}
-            onClick={() => {
-              const input = document.createElement("input");
-              input.type = "file";
-              input.accept = ".xlsx,.xls,.csv,.pdf";
-              input.multiple = true;
-              input.onchange = (ev) => {
-                const selected = Array.from((ev.target as HTMLInputElement).files || []);
-                if (selected.length > 0) { setWizardFiles(selected); setWizardOpen(true); }
-              };
-              input.click();
-            }}
-          >
-            <Upload className={`h-8 w-8 mx-auto mb-2 ${isDragging ? "text-primary animate-bounce" : "text-muted-foreground"}`} />
-            <p className="text-sm font-medium text-foreground">
-              {importing ? "Importando..." : "Arraste ficheiros para aqui"}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">Excel, CSV ou PDF · ou clique para procurar</p>
-          </div>
-
           <Card>
             <CardContent className="pt-4">
-              {isLoading ? (
-                <p className="text-muted-foreground text-sm">Carregando...</p>
-              ) : filteredProducts.length === 0 ? (
-                <p className="text-muted-foreground text-sm text-center py-8">
-                  {products.length === 0
-                    ? "Nenhum produto encontrado. Importe um ficheiro acima."
-                    : "Nenhum produto nesta pasta."}
-                </p>
-              ) : (
-                <SpreadsheetEditor products={filteredProducts} />
-              )}
+              <SpreadsheetEditor products={filteredProducts} />
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="images">
           <Card>
-            <CardHeader>
-              <p className="text-xs text-muted-foreground">
-                🖼️ Visualize e gere imagens para os seus produtos. Clique em "Gerar" para criar imagens com IA.
-              </p>
-            </CardHeader>
-            <CardContent>
-              <ProductImageGallery products={filteredProducts} />
+            <CardContent className="pt-4">
+              <div className="text-sm text-muted-foreground mb-4 flex items-center gap-2">
+                <ImageIcon className="h-4 w-4" />
+                Visualize e gere imagens para os seus produtos. Clique em "Gerar" para criar imagens com IA.
+              </div>
+              {(() => {
+                const withImage = filteredProducts.filter(p => p.image_url);
+                const withoutImage = filteredProducts.filter(p => !p.image_url);
+                return (
+                  <>
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="text-sm text-muted-foreground">{withImage.length} com imagem · {withoutImage.length} sem imagem</p>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                      {filteredProducts.map(product => (
+                        <div key={product.id} className="border rounded-lg p-3 text-center space-y-2 hover:shadow-md transition-shadow">
+                          {product.image_url ? (
+                            <img src={product.image_url} alt={product.name} className="w-full h-28 object-contain rounded" />
+                          ) : (
+                            <div className="w-full h-28 bg-muted rounded flex flex-col items-center justify-center text-muted-foreground">
+                              <ImageIcon className="h-8 w-8 mb-1" />
+                              <span className="text-xs">Sem imagem</span>
+                            </div>
+                          )}
+                          <p className="text-xs font-medium truncate">{product.name}</p>
+                          {product.sku && <p className="text-[10px] text-muted-foreground">{product.sku}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>
@@ -900,7 +894,7 @@ export default function Catalog() {
           <CatalogFilesTab selectedCatalogId={selectedCatalogId} />
         </TabsContent>
 
-        <TabsContent value="sync">
+        <TabsContent value="woo">
           <WooCommerceSync />
         </TabsContent>
       </Tabs>
@@ -912,6 +906,86 @@ export default function Catalog() {
         onConfirmImport={handleWizardConfirm}
       />
 
+      {/* New Catalog dialog */}
+      <Dialog open={showNewCatalogDialog} onOpenChange={setShowNewCatalogDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nova Pasta</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nome da pasta *</Label>
+              <Input
+                placeholder="Ex: Plasgourmet"
+                value={newCatalogName}
+                onChange={(e) => setNewCatalogName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && newCatalogName.trim()) handleCreateCatalog(); }}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Site do Fornecedor (opcional)</Label>
+              <Input
+                placeholder="https://plasgourmet.com"
+                value={newCatalogSupplierUrl}
+                onChange={(e) => setNewCatalogSupplierUrl(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Usado para buscar imagens e enriquecer dados dos produtos
+              </p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => { setShowNewCatalogDialog(false); setNewCatalogName(""); setNewCatalogSupplierUrl(""); }}>Cancelar</Button>
+              <Button onClick={handleCreateCatalog} disabled={!newCatalogName.trim()}>
+                <FolderPlus className="mr-2 h-4 w-4" />Criar Pasta
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Catalog dialog */}
+      <Dialog open={editCatalogDialogOpen} onOpenChange={setEditCatalogDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Pasta</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nome da pasta</Label>
+              <Input
+                value={editCatalogData.name}
+                onChange={(e) => setEditCatalogData(prev => ({ ...prev, name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Site do Fornecedor</Label>
+              <Input
+                placeholder="https://plasgourmet.com"
+                value={editCatalogData.supplier_url}
+                onChange={(e) => setEditCatalogData(prev => ({ ...prev, supplier_url: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">
+                Usado para buscar imagens e enriquecer dados dos produtos
+              </p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setEditCatalogDialogOpen(false)}>Cancelar</Button>
+              <Button onClick={async () => {
+                await updateCatalog.mutateAsync({
+                  id: editCatalogData.id,
+                  name: editCatalogData.name.trim() || undefined,
+                  supplier_url: editCatalogData.supplier_url.trim() || null,
+                });
+                setEditCatalogDialogOpen(false);
+              }} disabled={!editCatalogData.name.trim()}>
+                Guardar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Image fetch dialog */}
       <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
         <DialogContent className="max-w-md">
@@ -920,7 +994,7 @@ export default function Catalog() {
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Indique o URL base do fornecedor para procurar imagens dos produtos. O sistema vai mapear o site e tentar encontrar as imagens por SKU/nome.
+              Indique o URL base do fornecedor para procurar imagens dos produtos.
             </p>
             <div className="space-y-2">
               <Label>URL do Fornecedor (opcional)</Label>
@@ -929,9 +1003,6 @@ export default function Catalog() {
                 value={supplierBaseUrl}
                 onChange={(e) => setSupplierBaseUrl(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
-                Ex: https://plasgourmet.com — deixe vazio para pesquisa web genérica
-              </p>
             </div>
             <div className="flex gap-2 justify-end">
               <Button variant="outline" onClick={() => setImageDialogOpen(false)}>Cancelar</Button>
@@ -944,412 +1015,6 @@ export default function Catalog() {
               </Button>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
-
-function ProductForm({
-  product,
-  categories,
-  catalogs,
-  selectedCatalogId,
-  onSubmit,
-}: {
-  product: Product | null;
-  categories: { id: string; name: string }[];
-  catalogs: { id: string; name: string }[];
-  selectedCatalogId: string;
-  onSubmit: (data: any) => Promise<void>;
-}) {
-  const [name, setName] = useState(product?.name || "");
-  const [description, setDescription] = useState(product?.description || "");
-  const [sku, setSku] = useState(product?.sku || "");
-  const [categoryId, setCategoryId] = useState(product?.category_id || "none");
-  const [catalogId, setCatalogId] = useState(
-    (product as any)?.catalog_id || (selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized" ? selectedCatalogId : "none")
-  );
-  const [cost, setCost] = useState(product?.cost?.toString() || "0");
-  const [price, setPrice] = useState(product?.price?.toString() || "0");
-  const [stock, setStock] = useState(product?.stock?.toString() || "0");
-  const [status, setStatus] = useState(product?.status || "draft");
-  const [loading, setLoading] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    await onSubmit({
-      name,
-      description: description || null,
-      sku: sku || null,
-      category_id: categoryId === "none" ? null : categoryId,
-      catalog_id: catalogId === "none" ? null : catalogId,
-      cost: parseFloat(cost),
-      price: parseFloat(price),
-      stock: parseInt(stock),
-      status,
-      image_url: product?.image_url || null,
-    });
-    setLoading(false);
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Nome</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} required />
-        </div>
-        <div className="space-y-2">
-          <Label>SKU</Label>
-          <Input value={sku} onChange={(e) => setSku(e.target.value)} placeholder="Referência" />
-        </div>
-      </div>
-      <div className="space-y-2">
-        <Label>Descrição</Label>
-        <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Custo (R$)</Label>
-          <Input type="number" step="0.01" value={cost} onChange={(e) => setCost(e.target.value)} />
-        </div>
-        <div className="space-y-2">
-          <Label>Preço (R$)</Label>
-          <Input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Estoque</Label>
-          <Input type="number" value={stock} onChange={(e) => setStock(e.target.value)} />
-        </div>
-        <div className="space-y-2">
-          <Label>Status</Label>
-          <Select value={status} onValueChange={(v: any) => setStatus(v)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="draft">Pendente</SelectItem>
-              <SelectItem value="active">Publicado</SelectItem>
-              <SelectItem value="inactive">Inativo</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Categoria</Label>
-          <Select value={categoryId} onValueChange={setCategoryId}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Sem categoria</SelectItem>
-              {categories.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-2">
-          <Label>Pasta</Label>
-          <Select value={catalogId} onValueChange={setCatalogId}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Sem pasta</SelectItem>
-              {catalogs.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      <Button type="submit" className="w-full" disabled={loading}>
-        {loading ? "Salvando..." : product ? "Atualizar" : "Criar Produto"}
-      </Button>
-    </form>
-  );
-}
-
-function ProductImageGallery({ products }: { products: Product[] }) {
-  const updateProduct = useUpdateProduct();
-  const { data: allImages = [] } = useAllProductImages();
-  const addImage = useAddProductImage();
-  const deleteImage = useDeleteProductImage();
-  const { toast } = useToast();
-  const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
-  const [bulkGenerating, setBulkGenerating] = useState(false);
-  const [lightboxProduct, setLightboxProduct] = useState<Product | null>(null);
-  const [lightboxImageIdx, setLightboxImageIdx] = useState(0);
-
-  // Group images by product_id
-  const imagesByProduct = useMemo(() => {
-    const map: Record<string, ProductImage[]> = {};
-    for (const img of allImages) {
-      if (!map[img.product_id]) map[img.product_id] = [];
-      map[img.product_id].push(img);
-    }
-    return map;
-  }, [allImages]);
-
-  const getProductImages = (product: Product): { url: string; type: string; id?: string }[] => {
-    const imgs: { url: string; type: string; id?: string }[] = [];
-    // Primary image from products table
-    if (product.image_url) imgs.push({ url: product.image_url, type: "original" });
-    // Additional images from product_images table
-    const extra = imagesByProduct[product.id] || [];
-    for (const e of extra) {
-      if (e.url !== product.image_url) imgs.push({ url: e.url, type: e.type, id: e.id });
-    }
-    return imgs;
-  };
-
-  const uploadAndSaveImage = async (base64Url: string, productId: string, type: "original" | "optimized" | "ai_generated") => {
-    const base64Data = base64Url.split(",")[1];
-    const byteArray = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-    const fileName = `${productId}-${type}-${Date.now()}.png`;
-    const { error: uploadError } = await supabase.storage
-      .from("product-images")
-      .upload(fileName, byteArray, { contentType: "image/png", upsert: true });
-    if (uploadError) throw uploadError;
-    const { data: urlData } = supabase.storage.from("product-images").getPublicUrl(fileName);
-    await addImage.mutateAsync({ product_id: productId, url: urlData.publicUrl, type });
-    return urlData.publicUrl;
-  };
-
-  const generateImage = async (product: Product) => {
-    setProcessingIds(prev => new Set(prev).add(product.id));
-    try {
-      const { data, error } = await supabase.functions.invoke("ai-enrich", {
-        body: { action: "generate_image", product: { name: product.name, description: product.description } },
-      });
-      if (error) throw error;
-      if (data.success && data.image_url) {
-        const publicUrl = await uploadAndSaveImage(data.image_url, product.id, "original");
-        if (!product.image_url) await updateProduct.mutateAsync({ id: product.id, image_url: publicUrl });
-        toast({ title: `Imagem gerada para ${product.name}!` });
-      }
-    } catch (e: any) {
-      toast({ title: "Erro", description: e.message, variant: "destructive" });
-    }
-    setProcessingIds(prev => { const n = new Set(prev); n.delete(product.id); return n; });
-  };
-
-  const optimizeImage = async (product: Product) => {
-    if (!product.image_url) return;
-    setProcessingIds(prev => new Set(prev).add(`opt-${product.id}`));
-    try {
-      const { data, error } = await supabase.functions.invoke("ai-enrich", {
-        body: { action: "optimize_image", product: { image_url: product.image_url, product_name: product.name } },
-      });
-      if (error) throw error;
-      if (data.success && data.image_url) {
-        await uploadAndSaveImage(data.image_url, product.id, "optimized");
-        toast({ title: `Imagem otimizada para ${product.name}!` });
-      }
-    } catch (e: any) {
-      toast({ title: "Erro", description: e.message, variant: "destructive" });
-    }
-    setProcessingIds(prev => { const n = new Set(prev); n.delete(`opt-${product.id}`); return n; });
-  };
-
-  const generateScene = async (product: Product) => {
-    if (!product.image_url) return;
-    setProcessingIds(prev => new Set(prev).add(`scene-${product.id}`));
-    try {
-      const { data, error } = await supabase.functions.invoke("ai-enrich", {
-        body: { action: "generate_scene", product: { image_url: product.image_url, product_name: product.name, description: product.description } },
-      });
-      if (error) throw error;
-      if (data.success && data.image_url) {
-        await uploadAndSaveImage(data.image_url, product.id, "ai_generated");
-        toast({ title: `Cenário gerado para ${product.name}!` });
-      }
-    } catch (e: any) {
-      toast({ title: "Erro", description: e.message, variant: "destructive" });
-    }
-    setProcessingIds(prev => { const n = new Set(prev); n.delete(`scene-${product.id}`); return n; });
-  };
-
-  const generateAll = async () => {
-    const withoutImage = products.filter(p => !p.image_url);
-    if (withoutImage.length === 0) { toast({ title: "Todos os produtos já têm imagem!" }); return; }
-    setBulkGenerating(true);
-    let generated = 0;
-    for (const p of withoutImage) {
-      try { await generateImage(p); generated++; } catch {}
-    }
-    toast({ title: `${generated} imagens geradas!` });
-    setBulkGenerating(false);
-  };
-
-  const withImage = products.filter(p => p.image_url);
-  const withoutImage = products.filter(p => !p.image_url);
-
-  // Lightbox images
-  const lightboxImages = lightboxProduct ? getProductImages(lightboxProduct) : [];
-
-  const typeLabels: Record<string, string> = { original: "Original", optimized: "Otimizada", ai_generated: "IA Cenário" };
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-muted-foreground">
-          {withImage.length} com imagem · {withoutImage.length} sem imagem
-        </div>
-        {withoutImage.length > 0 && (
-          <Button size="sm" onClick={generateAll} disabled={bulkGenerating}>
-            {bulkGenerating ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <ImageIcon className="mr-2 h-3 w-3" />}
-            Gerar Todas ({withoutImage.length})
-          </Button>
-        )}
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-        {products.map(product => {
-          const imgs = getProductImages(product);
-          const imgCount = imgs.length;
-          return (
-            <div key={product.id} className="group border rounded-lg overflow-hidden bg-card cursor-pointer" onClick={() => { setLightboxProduct(product); setLightboxImageIdx(0); }}>
-              <div className="aspect-square bg-muted/30 flex items-center justify-center relative">
-                {product.image_url ? (
-                  <img src={product.image_url} alt={product.name} className="w-full h-full object-contain" />
-                ) : (
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                    <ImageIcon className="h-8 w-8" />
-                    <span className="text-[10px]">Sem imagem</span>
-                  </div>
-                )}
-                {imgCount > 1 && (
-                  <span className="absolute top-1 right-1 bg-primary text-primary-foreground text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                    {imgCount}
-                  </span>
-                )}
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 flex-wrap p-2" onClick={e => e.stopPropagation()}>
-                  {!product.image_url && (
-                    <Button size="sm" variant="secondary" className="text-[10px] h-6 px-2"
-                      onClick={() => generateImage(product)} disabled={processingIds.has(product.id)}>
-                      {processingIds.has(product.id) ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <ImageIcon className="mr-1 h-3 w-3" />}
-                      Gerar
-                    </Button>
-                  )}
-                  {product.image_url && (
-                    <>
-                      <Button size="sm" variant="secondary" className="text-[10px] h-6 px-2"
-                        onClick={() => optimizeImage(product)} disabled={processingIds.has(`opt-${product.id}`)}>
-                        {processingIds.has(`opt-${product.id}`) ? <Loader2 className="h-3 w-3 animate-spin" /> : "✨ Otimizar"}
-                      </Button>
-                      <Button size="sm" variant="secondary" className="text-[10px] h-6 px-2"
-                        onClick={() => generateScene(product)} disabled={processingIds.has(`scene-${product.id}`)}>
-                        {processingIds.has(`scene-${product.id}`) ? <Loader2 className="h-3 w-3 animate-spin" /> : "🏠 Cenário"}
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-              <div className="p-2">
-                <p className="text-xs font-medium truncate" title={product.name}>{product.name}</p>
-                <p className="text-[10px] text-muted-foreground truncate">{product.sku || "Sem SKU"}</p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Lightbox Dialog */}
-      <Dialog open={!!lightboxProduct} onOpenChange={() => setLightboxProduct(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {lightboxProduct?.name}
-              {lightboxProduct?.sku && <span className="text-xs text-muted-foreground font-normal">({lightboxProduct.sku})</span>}
-            </DialogTitle>
-          </DialogHeader>
-          {lightboxProduct && lightboxImages.length > 0 && (
-            <div className="space-y-4">
-              {/* Main image */}
-              <div className="relative bg-muted/20 rounded-lg flex items-center justify-center min-h-[300px] max-h-[50vh]">
-                <img
-                  src={lightboxImages[lightboxImageIdx]?.url}
-                  alt={lightboxProduct.name}
-                  className="max-w-full max-h-[50vh] object-contain rounded-lg"
-                />
-                <Badge className="absolute top-2 left-2 text-[10px]">
-                  {typeLabels[lightboxImages[lightboxImageIdx]?.type] || "Original"}
-                </Badge>
-                {lightboxImages[lightboxImageIdx]?.id && (
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    className="absolute top-2 right-2 h-7 text-xs"
-                    onClick={async () => {
-                      const img = lightboxImages[lightboxImageIdx];
-                      if (img.id) {
-                        await deleteImage.mutateAsync(img.id);
-                        toast({ title: "Imagem eliminada" });
-                        if (lightboxImageIdx > 0) setLightboxImageIdx(lightboxImageIdx - 1);
-                      }
-                    }}
-                  >
-                    <Trash2 className="h-3 w-3 mr-1" />Eliminar
-                  </Button>
-                )}
-              </div>
-
-              {/* Thumbnail strip */}
-              {lightboxImages.length > 1 && (
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                  {lightboxImages.map((img, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setLightboxImageIdx(idx)}
-                      className={`shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors ${
-                        idx === lightboxImageIdx ? "border-primary" : "border-transparent hover:border-muted-foreground/50"
-                      }`}
-                    >
-                      <img src={img.url} alt="" className="w-full h-full object-contain bg-muted/30" />
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Action buttons */}
-              <div className="flex gap-2 flex-wrap">
-                <Button size="sm" variant="outline" onClick={() => optimizeImage(lightboxProduct)}
-                  disabled={!lightboxProduct.image_url || processingIds.has(`opt-${lightboxProduct.id}`)}>
-                  {processingIds.has(`opt-${lightboxProduct.id}`) ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
-                  ✨ Otimizar Qualidade
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => generateScene(lightboxProduct)}
-                  disabled={!lightboxProduct.image_url || processingIds.has(`scene-${lightboxProduct.id}`)}>
-                  {processingIds.has(`scene-${lightboxProduct.id}`) ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
-                  🏠 Gerar Cenário Real
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => generateImage(lightboxProduct)}
-                  disabled={processingIds.has(lightboxProduct.id)}>
-                  {processingIds.has(lightboxProduct.id) ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
-                  <ImageIcon className="mr-2 h-3 w-3" />Gerar Nova
-                </Button>
-                {lightboxImages[lightboxImageIdx] && lightboxImages[lightboxImageIdx].url !== lightboxProduct.image_url && (
-                  <Button size="sm" onClick={async () => {
-                    await updateProduct.mutateAsync({ id: lightboxProduct.id, image_url: lightboxImages[lightboxImageIdx].url });
-                    toast({ title: "Imagem principal atualizada!" });
-                  }}>
-                    Definir como Principal
-                  </Button>
-                )}
-              </div>
-            </div>
-          )}
-          {lightboxProduct && lightboxImages.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground space-y-3">
-              <ImageIcon className="h-12 w-12 mx-auto" />
-              <p className="text-sm">Nenhuma imagem para este produto</p>
-              <Button size="sm" onClick={() => generateImage(lightboxProduct)} disabled={processingIds.has(lightboxProduct.id)}>
-                {processingIds.has(lightboxProduct.id) ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <ImageIcon className="mr-2 h-3 w-3" />}
-                Gerar com IA
-              </Button>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
     </div>
@@ -1495,5 +1160,105 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function InlineProductForm({
+  product,
+  categories,
+  selectedCatalogId,
+  onSubmit,
+}: {
+  product: Product | null;
+  categories: { id: string; name: string }[];
+  selectedCatalogId: string;
+  onSubmit: (data: any) => Promise<void>;
+}) {
+  const [name, setName] = useState(product?.name || "");
+  const [sku, setSku] = useState(product?.sku || "");
+  const [cost, setCost] = useState(product?.cost?.toString() || "0");
+  const [price, setPrice] = useState(product?.price?.toString() || "0");
+  const [stock, setStock] = useState(product?.stock?.toString() || "0");
+  const [brand, setBrand] = useState(product?.brand || "");
+  const [description, setDescription] = useState(product?.description || "");
+  const [categoryId, setCategoryId] = useState(product?.category_id || "");
+  const [supplierUrl, setSupplierUrl] = useState(product?.supplier_url || "");
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      const catalogId = selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized" ? selectedCatalogId : null;
+      await onSubmit({
+        name: name.trim(),
+        sku: sku.trim() || null,
+        cost: parseFloat(cost) || 0,
+        price: parseFloat(price) || 0,
+        stock: parseInt(stock) || 0,
+        brand: brand.trim() || null,
+        description: description.trim() || null,
+        category_id: categoryId || null,
+        supplier_url: supplierUrl.trim() || null,
+        catalog_id: product ? undefined : catalogId,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="col-span-2 space-y-1">
+          <Label>Nome *</Label>
+          <Input value={name} onChange={e => setName(e.target.value)} required />
+        </div>
+        <div className="space-y-1">
+          <Label>SKU</Label>
+          <Input value={sku} onChange={e => setSku(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label>Marca</Label>
+          <Input value={brand} onChange={e => setBrand(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label>Custo</Label>
+          <Input type="number" step="0.01" value={cost} onChange={e => setCost(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label>Preço</Label>
+          <Input type="number" step="0.01" value={price} onChange={e => setPrice(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label>Stock</Label>
+          <Input type="number" value={stock} onChange={e => setStock(e.target.value)} />
+        </div>
+        <div className="space-y-1">
+          <Label>Categoria</Label>
+          <Select value={categoryId} onValueChange={setCategoryId}>
+            <SelectTrigger><SelectValue placeholder="Selecionar..." /></SelectTrigger>
+            <SelectContent>
+              {categories.map(c => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="col-span-2 space-y-1">
+          <Label>URL Fornecedor</Label>
+          <Input value={supplierUrl} onChange={e => setSupplierUrl(e.target.value)} placeholder="https://..." />
+        </div>
+        <div className="col-span-2 space-y-1">
+          <Label>Descrição</Label>
+          <Textarea value={description} onChange={e => setDescription(e.target.value)} rows={3} />
+        </div>
+      </div>
+      <Button type="submit" className="w-full" disabled={!name.trim() || saving}>
+        {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+        {product ? "Guardar" : "Criar Produto"}
+      </Button>
+    </form>
   );
 }

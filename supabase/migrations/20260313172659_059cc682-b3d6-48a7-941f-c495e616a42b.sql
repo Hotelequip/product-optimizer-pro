@@ -1,0 +1,1 @@
+ALTER TABLE public.catalogs ADD COLUMN supplier_url text DEFAULT NULL;

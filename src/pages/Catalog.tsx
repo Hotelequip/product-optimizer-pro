@@ -212,10 +212,10 @@ export default function Catalog() {
             <CardContent>
               {isLoading ? (
                 <p className="text-muted-foreground text-sm">Carregando...</p>
-              ) : filtered.length === 0 ? (
+              ) : products.length === 0 ? (
                 <p className="text-muted-foreground text-sm text-center py-8">Nenhum produto encontrado. Importe um ficheiro Excel ou PDF.</p>
               ) : (
-                <SpreadsheetEditor products={filtered} />
+                <SpreadsheetEditor products={products} />
               )}
             </CardContent>
           </Card>

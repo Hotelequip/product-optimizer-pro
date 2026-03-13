@@ -915,9 +915,20 @@ export default function Catalog() {
                   {fetchProgress.current}/{fetchProgress.total} produto(s)
                 </span>
               </div>
-              <span className="text-muted-foreground">
-                {fetchProgress.found > 0 ? `${fetchProgress.found} encontrado(s)` : "A procurar..."}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-muted-foreground">
+                  {fetchProgress.found > 0 ? `${fetchProgress.found} encontrado(s)` : "A procurar..."}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => { cancelRef.current = true; }}
+                >
+                  <X className="h-3.5 w-3.5 mr-1" />
+                  Cancelar
+                </Button>
+              </div>
             </div>
             <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
               <div

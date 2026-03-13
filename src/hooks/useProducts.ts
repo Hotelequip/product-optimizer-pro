@@ -22,6 +22,11 @@ export interface Product {
   specifications: any[] | null;
   tags: string[] | null;
   last_enriched_at: string | null;
+  slug: string | null;
+  seo_score: number;
+  enrichment_phase: number;
+  short_description: string | null;
+  optimized_title: string | null;
   created_at: string;
   updated_at: string;
 }

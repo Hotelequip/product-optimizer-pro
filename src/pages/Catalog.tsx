@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from "react";
 import { useProducts, useCreateProduct, useUpdateProduct, Product } from "@/hooks/useProducts";
 import { useCategories } from "@/hooks/useCategories";
-import { useCatalogs, useCreateCatalog, useDeleteCatalog } from "@/hooks/useCatalogs";
+import { useCatalogs, useCreateCatalog, useDeleteCatalog, useRenameCatalog } from "@/hooks/useCatalogs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Upload, Sheet, FileUp, Loader2, FolderPlus, Folder, FolderOpen, Trash2, Search } from "lucide-react";
+import { Plus, Upload, Sheet, FileUp, Loader2, FolderPlus, Folder, FolderOpen, Trash2, Search, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { SpreadsheetEditor } from "@/components/SpreadsheetEditor";
 import { WooCommerceSync } from "@/components/WooCommerceSync";
@@ -25,6 +25,7 @@ export default function Catalog() {
   const updateProduct = useUpdateProduct();
   const createCatalog = useCreateCatalog();
   const deleteCatalog = useDeleteCatalog();
+  const renameCatalog = useRenameCatalog();
   const { toast } = useToast();
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -34,6 +35,8 @@ export default function Catalog() {
   const [newCatalogName, setNewCatalogName] = useState("");
   const [showNewCatalogInput, setShowNewCatalogInput] = useState(false);
   const [catalogSearch, setCatalogSearch] = useState("");
+  const [editingCatalogId, setEditingCatalogId] = useState<string | null>(null);
+  const [editingCatalogName, setEditingCatalogName] = useState("");
 
   // Filter products by selected catalog
   const filteredProducts = useMemo(() => {
@@ -287,10 +290,42 @@ export default function Catalog() {
             {catalogs
               .filter(cat => !catalogSearch || cat.name.toLowerCase().includes(catalogSearch.toLowerCase()))
               .map(cat => (
-              <DropdownMenuItem key={cat.id} className="gap-2 group" onClick={() => setSelectedCatalogId(cat.id)}>
-                <Folder className="h-4 w-4" />
-                <span className="flex-1 truncate">{cat.name}</span>
+              <DropdownMenuItem key={cat.id} className="gap-2 group" onClick={() => { if (editingCatalogId !== cat.id) setSelectedCatalogId(cat.id); }}>
+                <Folder className="h-4 w-4 shrink-0" />
+                {editingCatalogId === cat.id ? (
+                  <Input
+                    value={editingCatalogName}
+                    onChange={e => setEditingCatalogName(e.target.value)}
+                    onKeyDown={e => {
+                      e.stopPropagation();
+                      if (e.key === "Enter" && editingCatalogName.trim()) {
+                        renameCatalog.mutate({ id: cat.id, name: editingCatalogName.trim() });
+                        setEditingCatalogId(null);
+                      }
+                      if (e.key === "Escape") setEditingCatalogId(null);
+                    }}
+                    onClick={e => e.stopPropagation()}
+                    onBlur={() => {
+                      if (editingCatalogName.trim() && editingCatalogName !== cat.name) {
+                        renameCatalog.mutate({ id: cat.id, name: editingCatalogName.trim() });
+                      }
+                      setEditingCatalogId(null);
+                    }}
+                    className="h-6 text-xs flex-1"
+                    autoFocus
+                  />
+                ) : (
+                  <span className="flex-1 truncate">{cat.name}</span>
+                )}
                 <span className="text-xs text-muted-foreground">{catalogCounts[cat.id] || 0}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground"
+                  onClick={(e) => { e.stopPropagation(); setEditingCatalogId(cat.id); setEditingCatalogName(cat.name); }}
+                >
+                  <Pencil className="h-3 w-3" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"

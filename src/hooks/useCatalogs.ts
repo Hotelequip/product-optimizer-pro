@@ -48,6 +48,22 @@ export function useCreateCatalog() {
   });
 }
 
+export function useRenameCatalog() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const { error } = await supabase.from("catalogs").update({ name } as any).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["catalogs"] });
+      toast({ title: "Pasta renomeada!" });
+    },
+    onError: (e: Error) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
+  });
+}
+
 export function useDeleteCatalog() {
   const qc = useQueryClient();
   const { toast } = useToast();

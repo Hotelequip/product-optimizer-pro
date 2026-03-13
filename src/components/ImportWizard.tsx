@@ -197,6 +197,8 @@ export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWi
       setMergedProducts([]);
       setSelectedIds(new Set());
       setSearchTerm("");
+      setExistingSkus(new Set());
+      setExistingNames(new Set());
       setError(null);
       setImporting(false);
       runPipeline();

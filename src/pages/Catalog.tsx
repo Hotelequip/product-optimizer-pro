@@ -185,8 +185,7 @@ export default function Catalog() {
                 categories={categories}
                 onSubmit={async (data) => {
                   if (editingProduct) {
-                    const updateProduct = useUpdateProduct();
-                    // handled inline
+                    await updateProduct.mutateAsync({ id: editingProduct.id, ...data });
                   } else {
                     await createProduct.mutateAsync(data);
                   }

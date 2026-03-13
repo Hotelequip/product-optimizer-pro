@@ -70,6 +70,32 @@ export default function Catalog() {
     if (selectedCatalogId === id) setSelectedCatalogId("all");
   };
 
+  // Helper: normalize header string (lowercase, remove diacritics, trim)
+  const normalizeHeader = (h: any) =>
+    String(h || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+
+  // Helper: parse number with European format support (1.234,56 → 1234.56)
+  const parseNum = (val: any): number => {
+    if (val === null || val === undefined || val === "") return 0;
+    if (typeof val === "number") return val;
+    let s = String(val).replace(/\s/g, "").replace(/[R$€]/g, "");
+    const lastDot = s.lastIndexOf(".");
+    const lastComma = s.lastIndexOf(",");
+    if (lastComma > lastDot) s = s.replace(/\./g, "").replace(",", ".");
+    else if (lastDot > lastComma) s = s.replace(/,/g, "");
+    return parseFloat(s) || 0;
+  };
+
+  // Helper: find value from row using multiple possible keys
+  const findVal = (row: Record<string, string>, keys: string[]): string => {
+    for (const k of keys) {
+      for (const rk of Object.keys(row)) {
+        if (normalizeHeader(rk).includes(k)) return row[rk];
+      }
+    }
+    return "";
+  };
+
   // Excel/CSV import — assigns to selected catalog
   const handleFileImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -85,16 +111,32 @@ export default function Catalog() {
         const buffer = await file.arrayBuffer();
         const wb = XLSX.read(buffer, { type: "array" });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: "" });
+
+        // Auto-detect header row: scan first 20 rows for a row with 3+ non-empty cells
+        const allRows = XLSX.utils.sheet_to_json<any[]>(ws, { header: 1, defval: "" });
+        let headerRowIdx = 0;
+        for (let i = 0; i < Math.min(20, allRows.length); i++) {
+          const row = allRows[i] as any[];
+          if (!row) continue;
+          const nonEmpty = row.filter(c => String(c || "").trim().length > 0).length;
+          if (nonEmpty >= 3) {
+            // Check if this looks like a header (has text, not just numbers)
+            const hasText = row.some(c => typeof c === "string" && c.trim().length > 1 && isNaN(Number(c)));
+            if (hasText) { headerRowIdx = i; break; }
+          }
+        }
+
+        // Re-parse with detected header row
+        const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: "", range: headerRowIdx });
         rows = jsonData.map(r => {
           const out: Record<string, string> = {};
-          Object.keys(r).forEach(k => { out[k.trim().toLowerCase()] = String(r[k]).trim(); });
+          Object.keys(r).forEach(k => { out[k.trim()] = String(r[k]).trim(); });
           return out;
         });
       } else if (ext === "csv") {
         const text = await file.text();
         const lines = text.split("\n").filter(Boolean);
-        const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
+        const headers = lines[0].split(",").map(h => h.trim());
         for (let i = 1; i < lines.length; i++) {
           const vals = lines[i].split(",").map(v => v.trim());
           const row: Record<string, string> = {};
@@ -111,18 +153,19 @@ export default function Catalog() {
 
       let imported = 0;
       for (const row of rows) {
-        const name = row.name || row.nome || row["título"] || row.titulo || row.title || row["product name"] || row.produto || "";
+        // Flexible name detection
+        const name = findVal(row, ["description", "descricao", "name", "nome", "titulo", "title", "product name", "produto", "designacao"]);
         if (!name) continue;
         try {
           await createProduct.mutateAsync({
             name,
-            description: row.description || row.descricao || row["descrição"] || null,
-            sku: row.sku || row.ref || row["referência"] || row.referencia || row.codigo || row["código"] || null,
-            cost: parseFloat(row.cost || row.custo || "0") || 0,
-            price: parseFloat(row.price || row.preco || row["preço"] || row.pvp || "0") || 0,
-            stock: parseInt(row.stock || row.estoque || row.qty || row.quantidade || "0") || 0,
-            brand: row.brand || row.marca || null,
-            supplier_url: row.supplier_url || row.url || row.fornecedor_url || null,
+            description: null,
+            sku: findVal(row, ["ref", "sku", "referencia", "codigo", "code", "cod"]) || null,
+            cost: parseNum(findVal(row, ["cost", "custo", "tarif", "preco custo", "net", "euro"])),
+            price: parseNum(findVal(row, ["price", "preco", "pvp", "sell", "venda"])),
+            stock: parseInt(findVal(row, ["stock", "estoque", "qty", "quantidade", "std", "units"])) || 0,
+            brand: findVal(row, ["brand", "marca"]) || null,
+            supplier_url: findVal(row, ["supplier_url", "url", "fornecedor_url"]) || null,
             status: "draft",
             catalog_id: catalogId,
           } as any);

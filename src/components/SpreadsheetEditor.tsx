@@ -538,6 +538,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-32">Categoria</th>
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground min-w-[120px]">Desc. Curta</th>
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-28">Slug</th>
+              <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-16">Tipo</th>
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-36">Estado</th>
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-20">Fases</th>
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-12">SEO</th>

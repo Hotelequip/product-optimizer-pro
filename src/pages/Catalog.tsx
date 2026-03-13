@@ -25,6 +25,7 @@ export default function Catalog() {
   const updateProduct = useUpdateProduct();
   const createCatalog = useCreateCatalog();
   const deleteCatalog = useDeleteCatalog();
+  const renameCatalog = useRenameCatalog();
   const { toast } = useToast();
 
   const [dialogOpen, setDialogOpen] = useState(false);

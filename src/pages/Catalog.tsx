@@ -919,6 +919,9 @@ export default function Catalog() {
               <div className="flex items-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin text-primary" />
                 <span className="font-medium">
+                  {fetchProgress.catalogName && (
+                    <span className="text-primary mr-1">[{fetchProgress.catalogName}]</span>
+                  )}
                   {fetchProgress.current}/{fetchProgress.total} produto(s)
                 </span>
               </div>

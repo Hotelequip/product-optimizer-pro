@@ -441,9 +441,10 @@ export default function Catalog() {
     setWizardOpen(true);
   };
 
-  // Background: fetch images for products missing image_url
+  // Fetch images for products missing image_url
   const fetchMissingImages = async () => {
-    if (!user) return;
+    if (!user || fetchingImages) return;
+    setFetchingImages(true);
     try {
       const { data: noImageProducts } = await supabase
         .from("products")
@@ -452,7 +453,11 @@ export default function Catalog() {
         .is("image_url", null)
         .limit(30);
 
-      if (!noImageProducts || noImageProducts.length === 0) return;
+      if (!noImageProducts || noImageProducts.length === 0) {
+        toast({ title: "Todos os produtos já têm imagem", description: "Nenhum produto sem imagem encontrado." });
+        setFetchingImages(false);
+        return;
+      }
 
       toast({
         title: `A procurar imagens para ${noImageProducts.length} produto(s)...`,
@@ -465,6 +470,8 @@ export default function Catalog() {
 
       if (error || !data?.success) {
         console.warn("Image fetch failed:", error || data?.error);
+        toast({ title: "Erro ao procurar imagens", description: data?.error || "Tente novamente.", variant: "destructive" });
+        setFetchingImages(false);
         return;
       }
 
@@ -487,9 +494,13 @@ export default function Catalog() {
           title: `${foundCount} imagem(ns) encontrada(s)`,
           description: "Imagens de produtos atualizadas automaticamente.",
         });
+      } else {
+        toast({ title: "Nenhuma imagem encontrada", description: "Não foi possível encontrar imagens para os produtos." });
       }
     } catch (e) {
       console.warn("Background image fetch error:", e);
+    } finally {
+      setFetchingImages(false);
     }
   };
 

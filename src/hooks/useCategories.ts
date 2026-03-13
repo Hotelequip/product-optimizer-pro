@@ -26,6 +26,7 @@ export function useCategories() {
 export function useCreateCategory() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (name: string) => {
       const { data, error } = await supabase.from("categories").insert({ name }).select().single();

@@ -589,6 +589,11 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
                 </td>
                 <td className="p-2">{renderCell(product, "short_description", "max-w-[150px]")}</td>
                 <td className="p-2">{renderCell(product, "slug", "max-w-[120px]")}</td>
+                <td className="p-2">
+                  <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${product.product_type === "variable" ? "border-purple-500/40 text-purple-400" : "border-muted-foreground/30 text-muted-foreground"}`}>
+                    {product.product_type === "variable" ? "Variável" : "Simples"}
+                  </Badge>
+                </td>
                 <td className="p-2">{getStatusBadge(product)}</td>
                 <td className="p-2">{getPhaseButtons(product)}</td>
                 <td className="p-2">{getSeoScore(product)}</td>

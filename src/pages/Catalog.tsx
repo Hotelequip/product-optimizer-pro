@@ -1,4 +1,5 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useProducts, useCreateProduct, useUpdateProduct, Product } from "@/hooks/useProducts";
 import { useCategories } from "@/hooks/useCategories";
 import { useCatalogs, useCreateCatalog, useDeleteCatalog, useRenameCatalog } from "@/hooks/useCatalogs";
@@ -16,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Upload, Sheet, FileUp, Loader2, FolderPlus, Folder, FolderOpen, Trash2, Search, Pencil, ImageIcon, FileText, Download, File } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 import { SpreadsheetEditor } from "@/components/SpreadsheetEditor";
 import { WooCommerceSync } from "@/components/WooCommerceSync";
 import { supabase } from "@/integrations/supabase/client";

@@ -764,6 +764,13 @@ export default function Catalog() {
           <WooCommerceSync />
         </TabsContent>
       </Tabs>
+
+      <ImportWizard
+        open={wizardOpen}
+        onClose={() => { setWizardOpen(false); setWizardFiles([]); }}
+        files={wizardFiles}
+        onConfirmImport={handleWizardConfirm}
+      />
     </div>
   );
 }

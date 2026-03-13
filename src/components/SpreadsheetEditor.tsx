@@ -455,7 +455,19 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
         </div>
       )}
 
-      <div className="overflow-x-auto border rounded-lg">
+      {/* Single product operation progress */}
+      {(enrichingId || scrapingId || generatingImageId) && (
+        <div className="flex items-center gap-3 px-3 py-2 bg-primary/5 border rounded-lg">
+          <Loader2 className="h-4 w-4 animate-spin text-primary flex-shrink-0" />
+          <Progress className="flex-1 h-2" />
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            {enrichingId ? "IA Enriquecendo..." : scrapingId ? "Web Scraping..." : "Gerando imagem..."}
+            {" "}{products.find(p => p.id === (enrichingId || scrapingId || generatingImageId))?.name?.substring(0, 30)}
+          </span>
+        </div>
+      )}
+
+
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-muted/50 border-b">

@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { SpreadsheetEditor } from "@/components/SpreadsheetEditor";
 import { WooCommerceSync } from "@/components/WooCommerceSync";
+import { ImportWizard, ParsedProduct } from "@/components/ImportWizard";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function Catalog() {

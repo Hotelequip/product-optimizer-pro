@@ -246,6 +246,57 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
     setSelectedProducts(next);
   };
 
+  // WooCommerce Excel Export
+  const exportWooCommerceExcel = async () => {
+    const XLSX = await import("xlsx");
+    const productsToExport = selectedProducts.size > 0
+      ? products.filter(p => selectedProducts.has(p.id))
+      : products;
+
+    const stripHtml = (html: string | null) => {
+      if (!html) return "";
+      return html.replace(/<[^>]*>/g, "").trim();
+    };
+
+    const wooRows = productsToExport.map(p => {
+      const catName = categories.find(c => c.id === p.category_id)?.name || "";
+      return {
+        "Type": p.product_type || "simple",
+        "SKU": p.sku || "",
+        "Name": p.optimized_title || p.name,
+        "Published": p.status === "active" ? 1 : 0,
+        "Is featured?": 0,
+        "Visibility in catalog": "visible",
+        "Short description": p.short_description || "",
+        "Description": p.description || "",
+        "Tax status": "taxable",
+        "In stock?": p.stock > 0 ? 1 : 0,
+        "Stock": p.stock,
+        "Regular price": p.price || "",
+        "Categories": catName,
+        "Tags": (p.tags || []).join(", "),
+        "Images": p.image_url || "",
+        "Meta: _yoast_wpseo_title": p.seo_title || p.optimized_title || "",
+        "Meta: _yoast_wpseo_metadesc": p.meta_description || "",
+        "Meta: _yoast_wpseo_focuskw": stripHtml(p.optimized_title),
+        "Slug": p.slug || "",
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(wooRows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Products");
+
+    // Auto-size columns
+    const colWidths = Object.keys(wooRows[0] || {}).map(key => ({
+      wch: Math.max(key.length, ...wooRows.map(r => String((r as any)[key] || "").substring(0, 50).length)) + 2,
+    }));
+    ws["!cols"] = colWidths;
+
+    XLSX.writeFile(wb, `woocommerce-import-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    toast({ title: `${wooRows.length} produtos exportados para Excel WooCommerce!` });
+  };
+
   const renderCell = (product: Product, field: keyof Product, maxW?: string) => {
     if (isEditing(product.id, field)) {
       return (

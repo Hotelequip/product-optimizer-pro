@@ -32,6 +32,7 @@ export function usePriceRules() {
 export function useCreatePriceRule() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (rule: Omit<PriceRule, "id" | "user_id" | "created_at" | "updated_at">) => {
       const { data, error } = await supabase.from("price_rules").insert(rule).select().single();

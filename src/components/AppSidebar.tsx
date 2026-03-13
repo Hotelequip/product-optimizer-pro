@@ -22,6 +22,7 @@ const navItems = [
   { title: "Categorias", url: "/categories", icon: FolderOpen },
   { title: "Preços", url: "/pricing", icon: DollarSign },
   { title: "Análise", url: "/analysis", icon: BarChart3 },
+  { title: "WooCommerce", url: "/woocommerce", icon: Store },
 ];
 
 export function AppSidebar() {

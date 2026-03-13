@@ -11,6 +11,7 @@ import Catalog from "./pages/Catalog";
 import Categories from "./pages/Categories";
 import Pricing from "./pages/Pricing";
 import Analysis from "./pages/Analysis";
+import WooCommerceStores from "./pages/WooCommerceStores";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();

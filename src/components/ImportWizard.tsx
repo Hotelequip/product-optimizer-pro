@@ -265,6 +265,22 @@ export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWi
       setSelectedIds(new Set(products.map((_, i) => i)));
     }
 
+    // Phase 3: Fetch existing products to mark new vs update
+    setStatusMessage("A verificar produtos existentes...");
+    try {
+      const { data: existingProducts } = await supabase
+        .from("products")
+        .select("sku, name");
+      const skus = new Set<string>();
+      const names = new Set<string>();
+      for (const p of existingProducts || []) {
+        if (p.sku) skus.add(String(p.sku).toLowerCase().trim());
+        names.add(String(p.name).toLowerCase().trim());
+      }
+      setExistingSkus(skus);
+      setExistingNames(names);
+    } catch {}
+
     setParseProgress(100);
     setStep("review");
   };

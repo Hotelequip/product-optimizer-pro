@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useProducts, useCreateProduct, useUpdateProduct, Product } from "@/hooks/useProducts";
 import { useCategories } from "@/hooks/useCategories";
@@ -57,6 +57,7 @@ export default function Catalog() {
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [supplierBaseUrl, setSupplierBaseUrl] = useState("");
   const [fetchProgress, setFetchProgress] = useState<{ current: number; total: number; currentName: string; found: number } | null>(null);
+  const cancelRef = useRef(false);
 
   // Filter products by selected catalog
   const filteredProducts = useMemo(() => {
@@ -452,6 +453,7 @@ export default function Catalog() {
   // Fetch images + enrich data for products
   const fetchAndEnrich = async (baseUrl?: string, alsoEnrich?: boolean) => {
     if (!user || fetchingImages) return;
+    cancelRef.current = false;
     setFetchingImages(true);
     setImageDialogOpen(false);
     setFetchProgress(null);
@@ -492,6 +494,7 @@ export default function Catalog() {
       // Process images in batches of 5
       const IMG_BATCH = 5;
       for (let i = 0; i < noImageProducts.length; i += IMG_BATCH) {
+        if (cancelRef.current) break;
         const batch = noImageProducts.slice(i, i + IMG_BATCH);
         setFetchProgress({
           current: currentStep,
@@ -526,6 +529,7 @@ export default function Catalog() {
       // Process enrichment in batches of 5
       const ENRICH_BATCH = 5;
       for (let i = 0; i < noDataProducts.length; i += ENRICH_BATCH) {
+        if (cancelRef.current) break;
         const batch = noDataProducts.slice(i, i + ENRICH_BATCH);
         setFetchProgress({
           current: currentStep,
@@ -911,9 +915,20 @@ export default function Catalog() {
                   {fetchProgress.current}/{fetchProgress.total} produto(s)
                 </span>
               </div>
-              <span className="text-muted-foreground">
-                {fetchProgress.found > 0 ? `${fetchProgress.found} encontrado(s)` : "A procurar..."}
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-muted-foreground">
+                  {fetchProgress.found > 0 ? `${fetchProgress.found} encontrado(s)` : "A procurar..."}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => { cancelRef.current = true; }}
+                >
+                  <X className="h-3.5 w-3.5 mr-1" />
+                  Cancelar
+                </Button>
+              </div>
             </div>
             <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
               <div

@@ -1,4 +1,4 @@
-import { LayoutDashboard, Package, DollarSign, BarChart3, LogOut, FolderOpen } from "lucide-react";
+import { LayoutDashboard, Package, DollarSign, BarChart3, LogOut, FolderOpen, Store } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";

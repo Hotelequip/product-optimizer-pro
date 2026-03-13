@@ -57,6 +57,7 @@ export default function Catalog() {
   const [imageDialogOpen, setImageDialogOpen] = useState(false);
   const [supplierBaseUrl, setSupplierBaseUrl] = useState("");
   const [fetchProgress, setFetchProgress] = useState<{ current: number; total: number; currentName: string; found: number; catalogName?: string } | null>(null);
+  const [cancelRequested, setCancelRequested] = useState(false);
   const cancelRef = useRef(false);
 
   // Filter products by selected catalog

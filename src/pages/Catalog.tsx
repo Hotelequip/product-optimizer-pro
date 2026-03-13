@@ -453,6 +453,7 @@ export default function Catalog() {
         <TabsList>
           <TabsTrigger value="spreadsheet" className="gap-2"><Sheet className="h-4 w-4" />Planilha</TabsTrigger>
           <TabsTrigger value="images" className="gap-2"><ImageIcon className="h-4 w-4" />Imagens</TabsTrigger>
+          <TabsTrigger value="files" className="gap-2"><FileText className="h-4 w-4" />Ficheiros</TabsTrigger>
           <TabsTrigger value="sync">🔄 WooCommerce</TabsTrigger>
         </TabsList>
 

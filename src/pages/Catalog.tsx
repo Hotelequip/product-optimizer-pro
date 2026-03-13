@@ -912,6 +912,41 @@ export default function Catalog() {
         files={wizardFiles}
         onConfirmImport={handleWizardConfirm}
       />
+
+      {/* Image fetch dialog */}
+      <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Buscar Imagens de Produtos</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Indique o URL base do fornecedor para procurar imagens dos produtos. O sistema vai mapear o site e tentar encontrar as imagens por SKU/nome.
+            </p>
+            <div className="space-y-2">
+              <Label>URL do Fornecedor (opcional)</Label>
+              <Input
+                placeholder="https://plasgourmet.com"
+                value={supplierBaseUrl}
+                onChange={(e) => setSupplierBaseUrl(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Ex: https://plasgourmet.com — deixe vazio para pesquisa web genérica
+              </p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setImageDialogOpen(false)}>Cancelar</Button>
+              <Button
+                disabled={fetchingImages}
+                onClick={() => fetchMissingImages(supplierBaseUrl.trim() || undefined)}
+              >
+                {fetchingImages ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
+                Iniciar Busca
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

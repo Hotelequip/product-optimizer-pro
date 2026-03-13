@@ -22,6 +22,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
   const [editValue, setEditValue] = useState("");
   const [enrichingId, setEnrichingId] = useState<string | null>(null);
   const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
+  const [scrapingId, setScrapingId] = useState<string | null>(null);
 
   const startEdit = (productId: string, field: string, currentValue: any) => {
     setEditingCell({ productId, field });

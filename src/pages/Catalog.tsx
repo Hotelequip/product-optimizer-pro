@@ -540,3 +540,113 @@ function ProductForm({
     </form>
   );
 }
+
+function ProductImageGallery({ products }: { products: Product[] }) {
+  const updateProduct = useUpdateProduct();
+  const { toast } = useToast();
+  const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
+  const [bulkGenerating, setBulkGenerating] = useState(false);
+
+  const generateImage = async (product: Product) => {
+    setGeneratingIds(prev => new Set(prev).add(product.id));
+    try {
+      const { data, error } = await supabase.functions.invoke("ai-enrich", {
+        body: { action: "generate_image", product: { name: product.name, description: product.description } },
+      });
+      if (error) throw error;
+      if (data.success && data.image_url) {
+        const base64Data = data.image_url.split(",")[1];
+        const byteArray = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+        const fileName = `${product.id}-${Date.now()}.png`;
+        const { error: uploadError } = await supabase.storage
+          .from("product-images")
+          .upload(fileName, byteArray, { contentType: "image/png", upsert: true });
+        if (uploadError) throw uploadError;
+        const { data: urlData } = supabase.storage.from("product-images").getPublicUrl(fileName);
+        await updateProduct.mutateAsync({ id: product.id, image_url: urlData.publicUrl });
+        toast({ title: `Imagem gerada para ${product.name}!` });
+      }
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+    setGeneratingIds(prev => { const n = new Set(prev); n.delete(product.id); return n; });
+  };
+
+  const generateAll = async () => {
+    const withoutImage = products.filter(p => !p.image_url);
+    if (withoutImage.length === 0) { toast({ title: "Todos os produtos já têm imagem!" }); return; }
+    setBulkGenerating(true);
+    toast({ title: `Gerando imagens para ${withoutImage.length} produtos...` });
+    let generated = 0;
+    for (const p of withoutImage) {
+      try { await generateImage(p); generated++; } catch {}
+    }
+    toast({ title: `${generated} imagens geradas!` });
+    setBulkGenerating(false);
+  };
+
+  const withImage = products.filter(p => p.image_url);
+  const withoutImage = products.filter(p => !p.image_url);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-muted-foreground">
+          {withImage.length} com imagem · {withoutImage.length} sem imagem
+        </div>
+        {withoutImage.length > 0 && (
+          <Button size="sm" onClick={generateAll} disabled={bulkGenerating}>
+            {bulkGenerating ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <ImageIcon className="mr-2 h-3 w-3" />}
+            Gerar Todas ({withoutImage.length})
+          </Button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+        {products.map(product => (
+          <div key={product.id} className="group border rounded-lg overflow-hidden bg-card">
+            <div className="aspect-square bg-muted/30 flex items-center justify-center relative">
+              {product.image_url ? (
+                <img src={product.image_url} alt={product.name} className="w-full h-full object-contain" />
+              ) : (
+                <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                  <ImageIcon className="h-8 w-8" />
+                  <span className="text-[10px]">Sem imagem</span>
+                </div>
+              )}
+              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="text-xs h-7"
+                  onClick={() => generateImage(product)}
+                  disabled={generatingIds.has(product.id)}
+                >
+                  {generatingIds.has(product.id) ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <ImageIcon className="mr-1 h-3 w-3" />}
+                  {product.image_url ? "Regenerar" : "Gerar"}
+                </Button>
+                {product.image_url && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="text-xs h-7"
+                    onClick={async () => {
+                      await updateProduct.mutateAsync({ id: product.id, image_url: null });
+                      toast({ title: "Imagem removida" });
+                    }}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="p-2">
+              <p className="text-xs font-medium truncate" title={product.name}>{product.name}</p>
+              <p className="text-[10px] text-muted-foreground truncate">{product.sku || "Sem SKU"}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      catalog_files: {
+        Row: {
+          catalog_id: string | null
+          created_at: string
+          file_name: string
+          file_size: number | null
+          file_type: string
+          file_url: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          catalog_id?: string | null
+          created_at?: string
+          file_name: string
+          file_size?: number | null
+          file_type?: string
+          file_url: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          catalog_id?: string | null
+          created_at?: string
+          file_name?: string
+          file_size?: number | null
+          file_type?: string
+          file_url?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "catalog_files_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "catalogs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       catalogs: {
         Row: {
           created_at: string

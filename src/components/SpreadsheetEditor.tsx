@@ -467,7 +467,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
         </div>
       )}
 
-
+      <div className="overflow-x-auto border rounded-lg">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-muted/50 border-b">

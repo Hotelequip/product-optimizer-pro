@@ -182,6 +182,8 @@ export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWi
   const [mergedProducts, setMergedProducts] = useState<ParsedProduct[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [searchTerm, setSearchTerm] = useState("");
+  const [existingSkus, setExistingSkus] = useState<Set<string>>(new Set());
+  const [existingNames, setExistingNames] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
 

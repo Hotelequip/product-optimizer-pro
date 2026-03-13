@@ -1127,6 +1127,7 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
   const { data: files = [], isLoading } = useCatalogFiles(selectedCatalogId);
   const addFile = useAddCatalogFile();
   const deleteFile = useDeleteCatalogFile();
+  const { user } = useAuth();
   const { toast } = useToast();
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -1134,15 +1135,28 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
   const catalogId = selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized" ? selectedCatalogId : null;
 
   const uploadFile = async (file: globalThis.File) => {
+    if (!user) {
+      toast({ title: "Sessão expirada", description: "Inicie sessão novamente para carregar ficheiros.", variant: "destructive" });
+      return;
+    }
+
     setUploading(true);
     try {
-      const fileName = `${Date.now()}-${file.name}`;
+      const sanitizedName = file.name
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9._-]+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "");
+
+      const storagePath = `${user.id}/${Date.now()}-${sanitizedName || "arquivo"}`;
       const { error: uploadError } = await supabase.storage
         .from("catalog-files")
-        .upload(fileName, file, { upsert: true });
-      if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage.from("catalog-files").getPublicUrl(fileName);
+        .upload(storagePath, file, { upsert: false, contentType: file.type || undefined });
 
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage.from("catalog-files").getPublicUrl(storagePath);
       const ext = file.name.split(".").pop()?.toLowerCase() || "";
       const fileType = ["xlsx", "xls", "csv"].includes(ext) ? "excel" : ext === "pdf" ? "pdf" : "other";
 
@@ -1153,11 +1167,13 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
         file_type: fileType,
         file_size: file.size,
       });
+
       toast({ title: `Ficheiro "${file.name}" carregado!` });
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } finally {
+      setUploading(false);
     }
-    setUploading(false);
   };
 
   const handleDrop = (e: React.DragEvent) => {

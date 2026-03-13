@@ -413,25 +413,46 @@ export default function Catalog() {
         </TabsList>
 
         <TabsContent value="spreadsheet">
+          {/* Drop zone */}
+          <div
+            className={`mb-4 border-2 border-dashed rounded-xl p-6 text-center transition-colors cursor-pointer ${
+              isDragging ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground/50"
+            }`}
+            onDrop={handleDrop}
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); }}
+            onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); }}
+            onClick={() => {
+              const input = document.createElement("input");
+              input.type = "file";
+              input.accept = ".xlsx,.xls,.csv,.pdf";
+              input.onchange = (ev) => {
+                const file = (ev.target as HTMLInputElement).files?.[0];
+                if (!file) return;
+                const ext = file.name.split(".").pop()?.toLowerCase();
+                const fakeEvent = { target: { files: [file], value: "" } } as unknown as React.ChangeEvent<HTMLInputElement>;
+                if (ext === "pdf") handlePdfImport(fakeEvent);
+                else handleFileImport(fakeEvent);
+              };
+              input.click();
+            }}
+          >
+            <Upload className={`h-8 w-8 mx-auto mb-2 ${isDragging ? "text-primary animate-bounce" : "text-muted-foreground"}`} />
+            <p className="text-sm font-medium text-foreground">
+              {importing ? "Importando..." : "Arraste ficheiros para aqui"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">Excel, CSV ou PDF · ou clique para procurar</p>
+          </div>
+
           <Card>
-            <CardHeader>
-              <p className="text-xs text-muted-foreground">
-                💡 Importe Excel/PDF e os produtos aparecem aqui. Selecione uma pasta antes de importar para organizar.
-              </p>
-            </CardHeader>
-            <CardContent>
+            <CardContent className="pt-4">
               {isLoading ? (
                 <p className="text-muted-foreground text-sm">Carregando...</p>
               ) : filteredProducts.length === 0 ? (
-                <div className="text-center py-12 space-y-3">
-                  <Upload className="h-10 w-10 mx-auto text-muted-foreground" />
-                  <p className="text-muted-foreground text-sm">
-                    {products.length === 0
-                      ? "Arraste um ficheiro Excel, CSV ou PDF para importar produtos"
-                      : "Nenhum produto nesta pasta."}
-                  </p>
-                  <p className="text-xs text-muted-foreground">ou use os botões acima</p>
-                </div>
+                <p className="text-muted-foreground text-sm text-center py-8">
+                  {products.length === 0
+                    ? "Nenhum produto encontrado. Importe um ficheiro acima."
+                    : "Nenhum produto nesta pasta."}
+                </p>
               ) : (
                 <SpreadsheetEditor products={filteredProducts} />
               )}

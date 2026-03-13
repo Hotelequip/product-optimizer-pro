@@ -10,8 +10,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Pencil, Trash2, Search, Upload } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, Upload, FileUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { PdfImport } from "@/components/PdfImport";
 
 const statusLabels: Record<string, string> = { active: "Ativo", inactive: "Inativo", draft: "Rascunho" };
 const statusVariants: Record<string, "default" | "secondary" | "outline"> = { active: "default", inactive: "secondary", draft: "outline" };
@@ -179,6 +180,8 @@ export default function Catalog() {
           )}
         </CardContent>
       </Card>
+
+      <PdfImport />
     </div>
   );
 }

@@ -202,7 +202,12 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
         toast({ title: data.message || "Nenhum dado encontrado", variant: "destructive" });
       }
     } catch (e: any) {
-      toast({ title: "Erro no web scraping", description: e.message, variant: "destructive" });
+      const msg = e.message || "";
+      if (msg.includes("402") || msg.includes("créditos") || msg.includes("insuficientes")) {
+        toast({ title: "Créditos insuficientes", description: "Adiciona créditos em Settings → Workspace → Usage.", variant: "destructive" });
+      } else {
+        toast({ title: "Erro no web scraping", description: msg, variant: "destructive" });
+      }
     }
     setScrapingId(null);
   };

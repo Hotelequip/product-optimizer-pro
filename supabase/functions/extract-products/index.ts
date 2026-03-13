@@ -42,26 +42,36 @@ If you cannot find any products, return an empty array: []
 Text from PDF:
 ${text.substring(0, 15000)}`;
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${LOVABLE_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'google/gemini-3-flash-preview',
         messages: [
           { role: 'system', content: 'You are a data extraction assistant. Extract product information from text and return only valid JSON arrays.' },
           { role: 'user', content: prompt },
         ],
-        temperature: 0.1,
-        max_tokens: 4000,
       }),
     });
 
     if (!response.ok) {
       const errText = await response.text();
       console.error('AI API error:', errText);
+      if (response.status === 429) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Limite de requisições excedido. Tente novamente em instantes.' }),
+          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (response.status === 402) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Créditos insuficientes. Adicione créditos ao workspace.' }),
+          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
       return new Response(
         JSON.stringify({ success: false, error: `AI processing failed [${response.status}]` }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -71,7 +81,6 @@ ${text.substring(0, 15000)}`;
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || '[]';
     
-    // Parse the JSON from the response (handle potential markdown wrapping)
     let products;
     try {
       const jsonMatch = content.match(/\[[\s\S]*\]/);

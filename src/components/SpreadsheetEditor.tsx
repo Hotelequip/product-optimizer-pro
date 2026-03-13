@@ -306,11 +306,45 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
   return (
     <div className="space-y-3">
       {selectedProducts.size > 0 && (
-        <div className="flex items-center gap-3 p-2 bg-muted/50 rounded-lg border">
+        <div className="flex items-center gap-3 p-2 bg-muted/50 rounded-lg border flex-wrap">
           <span className="text-sm font-medium">{selectedProducts.size} selecionados</span>
           <Button size="sm" onClick={bulkEnrich} disabled={bulkEnriching}>
             {bulkEnriching ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Zap className="mr-2 h-3 w-3" />}
             Enriquecer em Massa
+          </Button>
+          <div className="flex items-center gap-1">
+            <FolderInput className="h-3.5 w-3.5 text-muted-foreground" />
+            <Select onValueChange={async (catalogId) => {
+              const ids = Array.from(selectedProducts);
+              const value = catalogId === "none" ? null : catalogId;
+              let moved = 0;
+              for (const id of ids) {
+                try { await updateProduct.mutateAsync({ id, catalog_id: value } as any); moved++; } catch {}
+              }
+              toast({ title: `${moved} produtos movidos!` });
+              setSelectedProducts(new Set());
+            }}>
+              <SelectTrigger className="h-7 text-xs w-36">
+                <SelectValue placeholder="Mover para..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sem pasta</SelectItem>
+                {catalogs.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button variant="destructive" size="sm" onClick={async () => {
+            const ids = Array.from(selectedProducts);
+            let deleted = 0;
+            for (const id of ids) {
+              try { await deleteProduct.mutateAsync(id); deleted++; } catch {}
+            }
+            toast({ title: `${deleted} produtos apagados!` });
+            setSelectedProducts(new Set());
+          }}>
+            <Trash2 className="mr-2 h-3 w-3" />Apagar
           </Button>
           <Button variant="ghost" size="sm" onClick={() => setSelectedProducts(new Set())}>Limpar</Button>
         </div>

@@ -839,25 +839,47 @@ export default function Catalog() {
         <TabsContent value="spreadsheet">
           <Card>
             <CardContent className="pt-4">
-              <SpreadsheetEditor
-                products={filteredProducts}
-                categories={categories}
-                catalogs={catalogs}
-                onUpdate={async (id, updates) => {
-                  await updateProduct.mutateAsync({ id, ...updates });
-                }}
-              />
+              <SpreadsheetEditor products={filteredProducts} />
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="images">
-          <ImagesTab
-            products={filteredProducts}
-            updateProduct={updateProduct}
-            queryClient={queryClient}
-            user={user}
-          />
+          <Card>
+            <CardContent className="pt-4">
+              <div className="text-sm text-muted-foreground mb-4 flex items-center gap-2">
+                <ImageIcon className="h-4 w-4" />
+                Visualize e gere imagens para os seus produtos. Clique em "Gerar" para criar imagens com IA.
+              </div>
+              {(() => {
+                const withImage = filteredProducts.filter(p => p.image_url);
+                const withoutImage = filteredProducts.filter(p => !p.image_url);
+                return (
+                  <>
+                    <div className="flex items-center justify-between mb-4">
+                      <p className="text-sm text-muted-foreground">{withImage.length} com imagem · {withoutImage.length} sem imagem</p>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                      {filteredProducts.map(product => (
+                        <div key={product.id} className="border rounded-lg p-3 text-center space-y-2 hover:shadow-md transition-shadow">
+                          {product.image_url ? (
+                            <img src={product.image_url} alt={product.name} className="w-full h-28 object-contain rounded" />
+                          ) : (
+                            <div className="w-full h-28 bg-muted rounded flex flex-col items-center justify-center text-muted-foreground">
+                              <ImageIcon className="h-8 w-8 mb-1" />
+                              <span className="text-xs">Sem imagem</span>
+                            </div>
+                          )}
+                          <p className="text-xs font-medium truncate">{product.name}</p>
+                          {product.sku && <p className="text-[10px] text-muted-foreground">{product.sku}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="files">

@@ -379,7 +379,178 @@ Return JSON:
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    return new Response(JSON.stringify({ success: false, error: 'Ação inválida. Use: scrape_supplier, search_enrich, bulk_enrich' }),
+    // ==========================================
+    // ACTION: fetch_images - Find images for products without image_url
+    // ==========================================
+    if (action === 'fetch_images') {
+      if (!products || !Array.isArray(products) || products.length === 0) {
+        return new Response(JSON.stringify({ success: false, error: 'Lista de produtos vazia' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const results: any[] = [];
+
+      for (const product of products.slice(0, 30)) {
+        try {
+          let imageUrl: string | null = null;
+
+          // Strategy 1: If supplier_url exists, scrape it for images
+          if (product.supplier_url) {
+            let targetUrl = product.supplier_url;
+            if (!targetUrl.startsWith('http')) targetUrl = `https://${targetUrl}`;
+
+            // Try to find SKU-specific page
+            if (product.sku) {
+              try {
+                const mapResp = await fetchWithRetry('https://api.firecrawl.dev/v1/map', {
+                  method: 'POST',
+                  headers: firecrawlHeaders,
+                  body: JSON.stringify({ url: targetUrl, search: product.sku, limit: 3 }),
+                });
+                if (mapResp.ok) {
+                  const mapData = await mapResp.json();
+                  const links = mapData.links || [];
+                  const skuLink = links.find((l: string) => l.toLowerCase().includes(product.sku.toLowerCase()));
+                  if (skuLink) targetUrl = skuLink;
+                  else if (links.length > 0) targetUrl = links[0];
+                }
+              } catch (e) {
+                console.log('Map error for image fetch:', e);
+              }
+            }
+
+            const scrapeResp = await fetchWithRetry('https://api.firecrawl.dev/v1/scrape', {
+              method: 'POST',
+              headers: firecrawlHeaders,
+              body: JSON.stringify({
+                url: targetUrl,
+                formats: ['markdown', 'links'],
+                onlyMainContent: true,
+                waitFor: 5000,
+              }),
+            });
+
+            if (scrapeResp.ok) {
+              const scrapeData = await scrapeResp.json();
+              const content = scrapeData.data?.markdown || scrapeData.markdown || '';
+              
+              // Extract image URLs from markdown content
+              const imgRegex = /!\[.*?\]\((https?:\/\/[^\s)]+\.(?:jpg|jpeg|png|webp|gif)[^\s)]*)\)/gi;
+              const matches = [...content.matchAll(imgRegex)];
+              if (matches.length > 0) {
+                imageUrl = matches[0][1];
+              }
+
+              // Also check for HTML-style img tags in content
+              if (!imageUrl) {
+                const imgTagRegex = /src=["'](https?:\/\/[^\s"']+\.(?:jpg|jpeg|png|webp|gif)[^\s"']*)/gi;
+                const tagMatches = [...content.matchAll(imgTagRegex)];
+                if (tagMatches.length > 0) {
+                  imageUrl = tagMatches[0][1];
+                }
+              }
+            }
+          }
+
+          // Strategy 2: Web search for product image
+          if (!imageUrl) {
+            const searchQuery = product.sku
+              ? `${product.name} ${product.sku} produto imagem`
+              : `${product.name} produto imagem`;
+
+            const searchResp = await fetchWithRetry('https://api.firecrawl.dev/v1/search', {
+              method: 'POST',
+              headers: firecrawlHeaders,
+              body: JSON.stringify({
+                query: searchQuery,
+                limit: 3,
+                lang: 'pt',
+                country: 'br',
+                scrapeOptions: { formats: ['markdown'] },
+              }),
+            });
+
+            if (searchResp.ok) {
+              const searchData = await searchResp.json();
+              const webResults = searchData.data || [];
+              
+              for (const result of webResults) {
+                const md = result.markdown || '';
+                const imgRegex = /!\[.*?\]\((https?:\/\/[^\s)]+\.(?:jpg|jpeg|png|webp|gif)[^\s)]*)\)/gi;
+                const matches = [...md.matchAll(imgRegex)];
+                if (matches.length > 0) {
+                  // Filter out tiny icons/logos by checking URL patterns
+                  const goodImg = matches.find((m: RegExpMatchArray) => {
+                    const url = m[1].toLowerCase();
+                    return !url.includes('logo') && !url.includes('icon') && !url.includes('favicon') && !url.includes('avatar');
+                  });
+                  imageUrl = goodImg ? goodImg[1] : matches[0][1];
+                  break;
+                }
+
+                // Also try img src pattern
+                const imgTagRegex = /src=["'](https?:\/\/[^\s"']+\.(?:jpg|jpeg|png|webp|gif)[^\s"']*)/gi;
+                const tagMatches = [...md.matchAll(imgTagRegex)];
+                if (tagMatches.length > 0) {
+                  imageUrl = tagMatches[0][1];
+                  break;
+                }
+              }
+            }
+          }
+
+          // Strategy 3: Use AI to find the best image from search results
+          if (!imageUrl) {
+            const googleQuery = `${product.name} ${product.sku || ''} product photo`;
+            const searchResp = await fetchWithRetry('https://api.firecrawl.dev/v1/search', {
+              method: 'POST',
+              headers: firecrawlHeaders,
+              body: JSON.stringify({ query: googleQuery, limit: 2, scrapeOptions: { formats: ['markdown'] } }),
+            });
+
+            if (searchResp.ok) {
+              const searchData = await searchResp.json();
+              const webContent = (searchData.data || []).map((r: any) => (r.markdown || '').substring(0, 3000)).join('\n');
+              
+              if (webContent.length > 50) {
+                const aiResp = await fetchWithRetry('https://ai.gateway.lovable.dev/v1/chat/completions', {
+                  method: 'POST',
+                  headers: aiHeaders,
+                  body: JSON.stringify({
+                    model: 'google/gemini-2.5-flash-lite',
+                    messages: [{
+                      role: 'user',
+                      content: `From this web content, extract the best product image URL for "${product.name}". Return ONLY the URL, nothing else. If no valid product image URL found, return "NONE".\n\n${webContent}`,
+                    }],
+                  }),
+                });
+
+                if (aiResp.ok) {
+                  const aiData = await aiResp.json();
+                  const aiUrl = (aiData.choices?.[0]?.message?.content || '').trim();
+                  if (aiUrl && aiUrl !== 'NONE' && aiUrl.startsWith('http')) {
+                    imageUrl = aiUrl;
+                  }
+                }
+              }
+            }
+          }
+
+          results.push({ product_id: product.id, success: !!imageUrl, image_url: imageUrl });
+
+          // Delay between products
+          await new Promise(r => setTimeout(r, 300));
+        } catch (e) {
+          console.error(`Error fetching image for ${product.name}:`, e);
+          results.push({ product_id: product.id, success: false, error: (e as Error).message });
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, results }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    return new Response(JSON.stringify({ success: false, error: 'Ação inválida. Use: scrape_supplier, search_enrich, bulk_enrich, fetch_images' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error) {

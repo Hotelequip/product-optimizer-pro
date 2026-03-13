@@ -44,6 +44,41 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
   const [bulkEnriching, setBulkEnriching] = useState(false);
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+
+  const setFilter = (col: string, value: string) => {
+    setColumnFilters(prev => {
+      const next = { ...prev };
+      if (value) next[col] = value; else delete next[col];
+      return next;
+    });
+  };
+  const clearFilters = () => setColumnFilters({});
+  const hasFilters = Object.keys(columnFilters).length > 0;
+
+  const filteredProducts = useMemo(() => {
+    if (!hasFilters) return products;
+    return products.filter(p => {
+      for (const [col, val] of Object.entries(columnFilters)) {
+        const v = val.toLowerCase();
+        if (col === "sku" && !(p.sku || "").toLowerCase().includes(v)) return false;
+        if (col === "name" && !p.name.toLowerCase().includes(v)) return false;
+        if (col === "optimized_title" && !(p.optimized_title || "").toLowerCase().includes(v)) return false;
+        if (col === "category") {
+          const catName = categories.find(c => c.id === p.category_id)?.name || "";
+          if (!catName.toLowerCase().includes(v)) return false;
+        }
+        if (col === "short_description" && !(p.short_description || "").toLowerCase().includes(v)) return false;
+        if (col === "slug" && !(p.slug || "").toLowerCase().includes(v)) return false;
+        if (col === "status" && v !== "all" && p.status !== v) return false;
+        if (col === "enrichment_phase" && v !== "all") {
+          const phase = p.enrichment_phase || 0;
+          if (String(phase) !== v) return false;
+        }
+      }
+      return true;
+    });
+  }, [products, columnFilters, categories]);
 
   const startEdit = (productId: string, field: string, currentValue: any) => {
     setEditingCell({ productId, field });

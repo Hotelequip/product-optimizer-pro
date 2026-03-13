@@ -817,44 +817,174 @@ export default function Catalog() {
           <FolderPlus className="h-3.5 w-3.5" />
           Nova Pasta
         </Button>
-              {/* Action buttons */}
-              <div className="flex gap-2 flex-wrap">
-                <Button size="sm" variant="outline" onClick={() => optimizeImage(lightboxProduct)}
-                  disabled={!lightboxProduct.image_url || processingIds.has(`opt-${lightboxProduct.id}`)}>
-                  {processingIds.has(`opt-${lightboxProduct.id}`) ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
-                  ✨ Otimizar Qualidade
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => generateScene(lightboxProduct)}
-                  disabled={!lightboxProduct.image_url || processingIds.has(`scene-${lightboxProduct.id}`)}>
-                  {processingIds.has(`scene-${lightboxProduct.id}`) ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
-                  🏠 Gerar Cenário Real
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => generateImage(lightboxProduct)}
-                  disabled={processingIds.has(lightboxProduct.id)}>
-                  {processingIds.has(lightboxProduct.id) ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : null}
-                  <ImageIcon className="mr-2 h-3 w-3" />Gerar Nova
-                </Button>
-                {lightboxImages[lightboxImageIdx] && lightboxImages[lightboxImageIdx].url !== lightboxProduct.image_url && (
-                  <Button size="sm" onClick={async () => {
-                    await updateProduct.mutateAsync({ id: lightboxProduct.id, image_url: lightboxImages[lightboxImageIdx].url });
-                    toast({ title: "Imagem principal atualizada!" });
-                  }}>
-                    Definir como Principal
-                  </Button>
-                )}
-              </div>
+      </div>
+
+      {/* Tabs */}
+      <Tabs defaultValue="spreadsheet" className="w-full">
+        <TabsList>
+          <TabsTrigger value="spreadsheet" className="gap-1.5">
+            <Sheet className="h-3.5 w-3.5" />Planilha
+          </TabsTrigger>
+          <TabsTrigger value="images" className="gap-1.5">
+            <ImageIcon className="h-3.5 w-3.5" />Imagens
+          </TabsTrigger>
+          <TabsTrigger value="files" className="gap-1.5">
+            <FileText className="h-3.5 w-3.5" />Ficheiros
+          </TabsTrigger>
+          <TabsTrigger value="woo" className="gap-1.5">
+            <Download className="h-3.5 w-3.5" />WooCommerce
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="spreadsheet">
+          <Card>
+            <CardContent className="pt-4">
+              <SpreadsheetEditor
+                products={filteredProducts}
+                categories={categories}
+                catalogs={catalogs}
+                onUpdate={async (id, updates) => {
+                  await updateProduct.mutateAsync({ id, ...updates });
+                }}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="images">
+          <ImagesTab
+            products={filteredProducts}
+            updateProduct={updateProduct}
+            queryClient={queryClient}
+            user={user}
+          />
+        </TabsContent>
+
+        <TabsContent value="files">
+          <CatalogFilesTab selectedCatalogId={selectedCatalogId} />
+        </TabsContent>
+
+        <TabsContent value="woo">
+          <WooCommerceSync />
+        </TabsContent>
+      </Tabs>
+
+      <ImportWizard
+        open={wizardOpen}
+        onClose={() => { setWizardOpen(false); setWizardFiles([]); }}
+        files={wizardFiles}
+        onConfirmImport={handleWizardConfirm}
+      />
+
+      {/* New Catalog dialog */}
+      <Dialog open={showNewCatalogDialog} onOpenChange={setShowNewCatalogDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nova Pasta</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nome da pasta *</Label>
+              <Input
+                placeholder="Ex: Plasgourmet"
+                value={newCatalogName}
+                onChange={(e) => setNewCatalogName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && newCatalogName.trim()) handleCreateCatalog(); }}
+                autoFocus
+              />
             </div>
-          )}
-          {lightboxProduct && lightboxImages.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground space-y-3">
-              <ImageIcon className="h-12 w-12 mx-auto" />
-              <p className="text-sm">Nenhuma imagem para este produto</p>
-              <Button size="sm" onClick={() => generateImage(lightboxProduct)} disabled={processingIds.has(lightboxProduct.id)}>
-                {processingIds.has(lightboxProduct.id) ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <ImageIcon className="mr-2 h-3 w-3" />}
-                Gerar com IA
+            <div className="space-y-2">
+              <Label>Site do Fornecedor (opcional)</Label>
+              <Input
+                placeholder="https://plasgourmet.com"
+                value={newCatalogSupplierUrl}
+                onChange={(e) => setNewCatalogSupplierUrl(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Usado para buscar imagens e enriquecer dados dos produtos
+              </p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => { setShowNewCatalogDialog(false); setNewCatalogName(""); setNewCatalogSupplierUrl(""); }}>Cancelar</Button>
+              <Button onClick={handleCreateCatalog} disabled={!newCatalogName.trim()}>
+                <FolderPlus className="mr-2 h-4 w-4" />Criar Pasta
               </Button>
             </div>
-          )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Catalog dialog */}
+      <Dialog open={editCatalogDialogOpen} onOpenChange={setEditCatalogDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Pasta</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Nome da pasta</Label>
+              <Input
+                value={editCatalogData.name}
+                onChange={(e) => setEditCatalogData(prev => ({ ...prev, name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Site do Fornecedor</Label>
+              <Input
+                placeholder="https://plasgourmet.com"
+                value={editCatalogData.supplier_url}
+                onChange={(e) => setEditCatalogData(prev => ({ ...prev, supplier_url: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">
+                Usado para buscar imagens e enriquecer dados dos produtos
+              </p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setEditCatalogDialogOpen(false)}>Cancelar</Button>
+              <Button onClick={async () => {
+                await updateCatalog.mutateAsync({
+                  id: editCatalogData.id,
+                  name: editCatalogData.name.trim() || undefined,
+                  supplier_url: editCatalogData.supplier_url.trim() || null,
+                });
+                setEditCatalogDialogOpen(false);
+              }} disabled={!editCatalogData.name.trim()}>
+                Guardar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Image fetch dialog */}
+      <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Buscar Imagens de Produtos</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Indique o URL base do fornecedor para procurar imagens dos produtos.
+            </p>
+            <div className="space-y-2">
+              <Label>URL do Fornecedor (opcional)</Label>
+              <Input
+                placeholder="https://plasgourmet.com"
+                value={supplierBaseUrl}
+                onChange={(e) => setSupplierBaseUrl(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setImageDialogOpen(false)}>Cancelar</Button>
+              <Button
+                disabled={fetchingImages}
+                onClick={() => fetchMissingImages(supplierBaseUrl.trim() || undefined)}
+              >
+                {fetchingImages ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
+                Iniciar Busca
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

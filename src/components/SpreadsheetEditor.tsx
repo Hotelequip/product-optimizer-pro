@@ -339,11 +339,11 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
             <tr className="border-b bg-muted/20">
               <td className="p-1"><Filter className="h-3 w-3 text-muted-foreground mx-auto" /></td>
               <td className="p-1"><Input placeholder="SKU..." value={columnFilters.sku || ""} onChange={e => setFilter("sku", e.target.value)} className="h-6 text-[10px] px-1" /></td>
-              <td className="p-1"><Input placeholder="Título..." value={columnFilters.name || ""} onChange={e => setFilter("name", e.target.value)} className="h-6 text-[10px] px-1" /></td>
-              <td className="p-1"><Input placeholder="Otimizado..." value={columnFilters.optimized_title || ""} onChange={e => setFilter("optimized_title", e.target.value)} className="h-6 text-[10px] px-1" /></td>
-              <td className="p-1"><Input placeholder="Categoria..." value={columnFilters.category || ""} onChange={e => setFilter("category", e.target.value)} className="h-6 text-[10px] px-1" /></td>
-              <td className="p-1"><Input placeholder="Desc..." value={columnFilters.short_description || ""} onChange={e => setFilter("short_description", e.target.value)} className="h-6 text-[10px] px-1" /></td>
-              <td className="p-1"><Input placeholder="Slug..." value={columnFilters.slug || ""} onChange={e => setFilter("slug", e.target.value)} className="h-6 text-[10px] px-1" /></td>
+              <td className="p-1"></td>
+              <td className="p-1"></td>
+              <td className="p-1"></td>
+              <td className="p-1"></td>
+              <td className="p-1"></td>
               <td className="p-1">
                 <Select value={columnFilters.status || "all"} onValueChange={v => setFilter("status", v === "all" ? "" : v)}>
                   <SelectTrigger className="h-6 text-[10px] px-1"><SelectValue /></SelectTrigger>
@@ -355,18 +355,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
                   </SelectContent>
                 </Select>
               </td>
-              <td className="p-1">
-                <Select value={columnFilters.enrichment_phase || "all"} onValueChange={v => setFilter("enrichment_phase", v === "all" ? "" : v)}>
-                  <SelectTrigger className="h-6 text-[10px] px-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas</SelectItem>
-                    <SelectItem value="0">0</SelectItem>
-                    <SelectItem value="1">1</SelectItem>
-                    <SelectItem value="2">2</SelectItem>
-                    <SelectItem value="3">3</SelectItem>
-                  </SelectContent>
-                </Select>
-              </td>
+              <td className="p-1"></td>
               <td className="p-1"></td>
               <td className="p-1"></td>
             </tr>

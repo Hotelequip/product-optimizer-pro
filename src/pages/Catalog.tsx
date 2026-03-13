@@ -1443,7 +1443,190 @@ function InlineProductForm({
   );
 }
 
-function ImageGalleryTab({ products }: { products: Product[] }) {
+function OptimizedProductsTab({ products }: { products: Product[] }) {
+  const [sortBy, setSortBy] = useState<"phase" | "date" | "seo">("date");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  const enriched = products.filter(p => (p.enrichment_phase || 0) > 0 || p.last_enriched_at);
+  const notEnriched = products.filter(p => !p.enrichment_phase && !p.last_enriched_at);
+
+  const sorted = [...enriched].sort((a, b) => {
+    if (sortBy === "phase") return (b.enrichment_phase || 0) - (a.enrichment_phase || 0);
+    if (sortBy === "seo") return (b.seo_score || 0) - (a.seo_score || 0);
+    return new Date(b.last_enriched_at || 0).getTime() - new Date(a.last_enriched_at || 0).getTime();
+  });
+
+  const getPhaseLabel = (phase: number) => {
+    if (phase >= 3) return { label: "Completo", color: "bg-green-500/15 text-green-700 border-green-500/30" };
+    if (phase === 2) return { label: "Fase 2 – SEO", color: "bg-blue-500/15 text-blue-700 border-blue-500/30" };
+    if (phase === 1) return { label: "Fase 1 – Base", color: "bg-yellow-500/15 text-yellow-700 border-yellow-500/30" };
+    return { label: "Pendente", color: "bg-muted text-muted-foreground border-border" };
+  };
+
+  const getCompleteness = (p: Product) => {
+    let score = 0;
+    let total = 8;
+    if (p.description) score++;
+    if (p.short_description) score++;
+    if (p.seo_title || p.optimized_title) score++;
+    if (p.meta_description) score++;
+    if (p.slug) score++;
+    if (p.tags && p.tags.length > 0) score++;
+    if (p.image_url) score++;
+    if (p.brand) score++;
+    return Math.round((score / total) * 100);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Summary bar */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2 text-sm">
+          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <span className="font-medium">{enriched.length}</span>
+          <span className="text-muted-foreground">otimizados</span>
+        </div>
+        <div className="flex items-center gap-2 text-sm">
+          <AlertCircle className="h-4 w-4 text-muted-foreground" />
+          <span className="font-medium">{notEnriched.length}</span>
+          <span className="text-muted-foreground">pendentes</span>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Ordenar:</span>
+          <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
+            <SelectTrigger className="h-8 w-[140px] text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="date">Data</SelectItem>
+              <SelectItem value="phase">Fase</SelectItem>
+              <SelectItem value="seo">SEO Score</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {enriched.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <Sparkles className="h-10 w-10 mx-auto mb-3 opacity-40" />
+          <p className="font-medium">Nenhum produto otimizado ainda</p>
+          <p className="text-sm mt-1">Use o botão "Buscar Imagens e Dados" ou enriqueça produtos individualmente na Planilha.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {sorted.map(p => {
+            const phase = getPhaseLabel(p.enrichment_phase || 0);
+            const completeness = getCompleteness(p);
+            const isExpanded = expandedId === p.id;
+
+            return (
+              <div
+                key={p.id}
+                className="border rounded-lg overflow-hidden transition-colors hover:border-primary/40"
+              >
+                {/* Header row */}
+                <button
+                  className="w-full flex items-center gap-3 p-3 text-left"
+                  onClick={() => setExpandedId(isExpanded ? null : p.id)}
+                >
+                  {p.image_url ? (
+                    <img src={p.image_url} alt={p.name} className="h-12 w-12 rounded object-cover flex-shrink-0 border" />
+                  ) : (
+                    <div className="h-12 w-12 rounded bg-muted flex items-center justify-center flex-shrink-0">
+                      <ImageIcon className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{p.optimized_title || p.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{p.sku ? `SKU: ${p.sku} · ` : ""}{p.brand || "Sem marca"}</p>
+                  </div>
+                  <Badge variant="outline" className={`text-xs ${phase.color}`}>{phase.label}</Badge>
+                  <div className="flex items-center gap-1.5 flex-shrink-0" title={`${completeness}% completo`}>
+                    <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{
+                          width: `${completeness}%`,
+                          backgroundColor: completeness >= 80 ? 'hsl(var(--chart-2))' : completeness >= 50 ? 'hsl(var(--chart-4))' : 'hsl(var(--chart-5))',
+                        }}
+                      />
+                    </div>
+                    <span className="text-xs text-muted-foreground w-8">{completeness}%</span>
+                  </div>
+                  <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                </button>
+
+                {/* Expanded details */}
+                {isExpanded && (
+                  <div className="border-t px-4 py-3 space-y-3 bg-muted/30 text-sm">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <DetailField label="Título Original" value={p.name} />
+                      <DetailField label="Título Otimizado" value={p.optimized_title} />
+                      <DetailField label="SEO Title" value={p.seo_title} />
+                      <DetailField label="Slug" value={p.slug} />
+                      <div className="md:col-span-2">
+                        <DetailField label="Meta Descrição" value={p.meta_description} />
+                      </div>
+                      <div className="md:col-span-2">
+                        <DetailField label="Descrição Curta" value={p.short_description} />
+                      </div>
+                      <div className="md:col-span-2">
+                        <DetailField label="Descrição" value={p.description} maxLines />
+                      </div>
+                      {p.tags && p.tags.length > 0 && (
+                        <div className="md:col-span-2">
+                          <span className="text-xs font-medium text-muted-foreground block mb-1">Tags</span>
+                          <div className="flex flex-wrap gap-1">
+                            {p.tags.map((t, i) => (
+                              <Badge key={i} variant="secondary" className="text-xs">{t}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-4 pt-2 text-xs text-muted-foreground border-t">
+                      <span>Fase: {p.enrichment_phase || 0}/3</span>
+                      <span>SEO Score: {p.seo_score || 0}</span>
+                      {p.last_enriched_at && (
+                        <span>Última otimização: {new Date(p.last_enriched_at).toLocaleString("pt-PT")}</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Pending products summary */}
+      {notEnriched.length > 0 && (
+        <div className="border border-dashed rounded-lg p-4">
+          <p className="text-sm font-medium mb-1">{notEnriched.length} produtos ainda por otimizar</p>
+          <p className="text-xs text-muted-foreground">
+            {notEnriched.slice(0, 5).map(p => p.name).join(", ")}
+            {notEnriched.length > 5 ? ` e mais ${notEnriched.length - 5}...` : ""}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DetailField({ label, value, maxLines }: { label: string; value?: string | null; maxLines?: boolean }) {
+  return (
+    <div>
+      <span className="text-xs font-medium text-muted-foreground block mb-0.5">{label}</span>
+      {value ? (
+        <p className={`text-sm ${maxLines ? "line-clamp-4" : ""}`}>{value}</p>
+      ) : (
+        <p className="text-sm text-muted-foreground/50 italic">—</p>
+      )}
+    </div>
+  );
+}
+
+
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [generatingAi, setGeneratingAi] = useState(false);
   const [optimizing, setOptimizing] = useState(false);

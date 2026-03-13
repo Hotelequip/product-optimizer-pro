@@ -197,6 +197,42 @@ export type Database = {
         }
         Relationships: []
       }
+      woo_stores: {
+        Row: {
+          consumer_key: string
+          consumer_secret: string
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          store_url: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          consumer_key: string
+          consumer_secret: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          store_url: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          consumer_key?: string
+          consumer_secret?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          store_url?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

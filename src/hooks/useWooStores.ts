@@ -14,7 +14,7 @@ export interface WooStore {
   updated_at: string;
 }
 
-type WooStoreInsert = Omit<WooStore, "id" | "created_at" | "updated_at">;
+type WooStoreInsert = Omit<WooStore, "id" | "created_at" | "updated_at" | "is_active"> & { is_active?: boolean };
 type WooStoreUpdate = Partial<Omit<WooStore, "id" | "user_id" | "created_at" | "updated_at">> & { id: string };
 
 export function useWooStores() {

@@ -195,7 +195,13 @@ export default function Catalog() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold tracking-tight">Catálogo</h1>
+        <h1 className="text-3xl font-bold tracking-tight">
+          {selectedCatalogId === "all"
+            ? "Catálogo"
+            : selectedCatalogId === "uncategorized"
+            ? "Catálogo — Sem pasta"
+            : `Catálogo ${catalogs.find(c => c.id === selectedCatalogId)?.name || ""}`}
+        </h1>
         <div className="flex gap-2">
           <label>
             <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileImport} disabled={importing} />

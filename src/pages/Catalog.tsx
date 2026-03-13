@@ -49,6 +49,7 @@ export default function Catalog() {
   const [isDragging, setIsDragging] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardFiles, setWizardFiles] = useState<File[]>([]);
+  const [fetchingImages, setFetchingImages] = useState(false);
 
   // Filter products by selected catalog
   const filteredProducts = useMemo(() => {

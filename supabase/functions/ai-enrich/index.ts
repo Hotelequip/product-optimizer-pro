@@ -75,28 +75,34 @@ Deno.serve(async (req) => {
     // ACTION: enrich (single product text enrichment)
     // ========================
     if (action === 'enrich') {
-      const prompt = `You are an expert e-commerce product copywriter for WooCommerce stores.
-Given this product information, generate professional content in Portuguese (Portugal):
+      const prompt = `You are an expert e-commerce product copywriter and WooCommerce specialist.
+Given this product information, generate professional, SEO-optimized content in Portuguese (Portugal):
 
 Product: ${JSON.stringify(product)}
 
 You MUST return a JSON object with ALL these fields:
 {
-  "optimized_title": "Compelling, SEO-optimized product title (max 70 chars). Include brand and key feature.",
-  "description": "Full HTML product description for WooCommerce. Use <h2>, <h3>, <p>, <ul>, <li> tags. Include: 1) Opening paragraph selling the product, 2) Key benefits section, 3) Technical specifications table using <table><tr><td> format, 4) Usage/application notes if relevant. Minimum 150 words.",
-  "short_description": "Concise HTML summary (2-3 sentences) highlighting the main selling points. Use <p> and <strong> tags. This appears next to the product image in WooCommerce.",
-  "seo_title": "SEO title for search engines (max 60 chars with primary keyword)",
-  "meta_description": "Meta description (max 160 chars, compelling, with call-to-action)",
-  "tags": ["relevant", "search", "tags"],
+  "optimized_title": "Compelling, SEO-optimized product title (max 70 chars). Include brand, key feature, and primary keyword. Format: [Brand] [Product Type] [Key Feature] [Size/Variant if applicable].",
+  "description": "Full HTML product description for WooCommerce (minimum 200 words). Structure: 1) <h2> with main keyword, 2) <p> opening paragraph selling benefits, 3) <h3>Características Principais</h3> with <ul><li> list, 4) <h3>Especificações Técnicas</h3> with <table><thead><tr><th>Característica</th><th>Detalhe</th></tr></thead><tbody><tr><td>...</td><td>...</td></tr></tbody></table>, 5) <h3>Aplicações</h3> with usage notes. Use proper semantic HTML.",
+  "short_description": "Concise HTML summary (2-3 sentences, max 200 chars) for WooCommerce product page sidebar. Use <p> and <strong> tags. Focus on: what it is, main benefit, who it's for. Must be persuasive and scannable.",
+  "seo_title": "SEO meta title (max 60 chars). Format: [Primary Keyword] - [Brand] | [Benefit]. Include the most searched term first.",
+  "meta_description": "Meta description (max 155 chars). Include primary keyword, benefit, and a call-to-action like 'Compre agora', 'Encomende já' or 'Descubra'.",
+  "slug": "url-friendly-slug-with-keywords-no-accents-lowercase-hyphens",
+  "tags": ["5-10 relevant search tags in Portuguese, include brand, category, material, use case"],
   "attributes": [{"name": "attr_name", "value": "attr_value"}],
-  "suggested_category": "category name"
+  "suggested_category": "most appropriate WooCommerce category name in Portuguese",
+  "product_type": "simple or variable. Analyze the product name and description: if it mentions sizes, colors, variants, models, or options (e.g. S/M/L/XL, 20cm/30cm, Preto/Branco), return 'variable'. Otherwise return 'simple'.",
+  "focus_keyword": "The single most important SEO keyword for this product in Portuguese"
 }
 
-IMPORTANT: 
-- Description must be rich HTML ready for WooCommerce, NOT plain text
-- Include technical specs as an HTML table when possible
-- Short description must be concise but persuasive
-- All text in Portuguese (Portugal)`;
+CRITICAL RULES:
+- ALL text must be in Portuguese (Portugal), not Brazilian Portuguese
+- Description must be rich semantic HTML ready for WooCommerce import
+- Include technical specs as a proper HTML table with thead/tbody
+- Short description must be CONCISE (2-3 sentences max) but persuasive
+- Product type detection: look for indicators of variations (sizes, colors, models, capacities)
+- SEO title and meta description must contain the focus keyword
+- Tags must be relevant search terms customers would use`;
 
       const data = await callAI(LOVABLE_API_KEY, 'google/gemini-3-flash-preview', [
         { role: 'system', content: 'You are an e-commerce product enrichment AI. Return only valid JSON.' },

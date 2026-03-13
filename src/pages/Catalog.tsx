@@ -676,7 +676,12 @@ export default function Catalog() {
           }}>
             <FileUp className="mr-2 h-4 w-4" />PDF
           </Button>
-          <Button variant="outline" disabled={fetchingImages} onClick={() => setImageDialogOpen(true)}>
+          <Button variant="outline" disabled={fetchingImages} onClick={() => {
+            // Pre-fill with current catalog's supplier URL if available
+            const currentCatalog = catalogs.find(c => c.id === selectedCatalogId);
+            setSupplierBaseUrl((currentCatalog as any)?.supplier_url || "");
+            setImageDialogOpen(true);
+          }}>
             {fetchingImages ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
             Buscar Imagens
           </Button>

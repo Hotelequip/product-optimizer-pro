@@ -769,6 +769,7 @@ export default function Catalog() {
               const updates: Record<string, unknown> = {};
               if (r.enriched.description) updates.description = r.enriched.description;
               if (r.enriched.short_description) updates.short_description = r.enriched.short_description;
+              if (r.enriched.optimized_title) updates.optimized_title = r.enriched.optimized_title;
               if (r.enriched.brand) updates.brand = r.enriched.brand;
               if (r.enriched.seo_title) updates.seo_title = r.enriched.seo_title;
               if (r.enriched.meta_description) updates.meta_description = r.enriched.meta_description;

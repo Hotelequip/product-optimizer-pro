@@ -233,51 +233,56 @@ export default function Catalog() {
         </div>
       </div>
 
-      {/* Catalog/Folder selector */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <Button
-          variant={selectedCatalogId === "all" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setSelectedCatalogId("all")}
-          className="gap-1.5"
-        >
-          <FolderOpen className="h-3.5 w-3.5" />
-          Todos
-          <span className="ml-1 text-xs opacity-70">({catalogCounts.all})</span>
-        </Button>
-        <Button
-          variant={selectedCatalogId === "uncategorized" ? "default" : "outline"}
-          size="sm"
-          onClick={() => setSelectedCatalogId("uncategorized")}
-          className="gap-1.5"
-        >
-          <Folder className="h-3.5 w-3.5" />
-          Sem pasta
-          <span className="ml-1 text-xs opacity-70">({catalogCounts.uncategorized || 0})</span>
-        </Button>
-        {catalogs.map(cat => (
-          <div key={cat.id} className="flex items-center gap-0.5">
-            <Button
-              variant={selectedCatalogId === cat.id ? "default" : "outline"}
-              size="sm"
-              onClick={() => setSelectedCatalogId(cat.id)}
-              className="gap-1.5"
-            >
-              <Folder className="h-3.5 w-3.5" />
-              {cat.name}
-              <span className="ml-1 text-xs opacity-70">({catalogCounts[cat.id] || 0})</span>
+      {/* Catalog/Folder selector - compact dropdown */}
+      <div className="flex items-center gap-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-2">
+              <Folder className="h-4 w-4" />
+              {selectedCatalogId === "all"
+                ? "Todas as pastas"
+                : selectedCatalogId === "uncategorized"
+                ? "Sem pasta"
+                : catalogs.find(c => c.id === selectedCatalogId)?.name || "Pasta"}
+              <span className="text-xs opacity-70">
+                ({selectedCatalogId === "all"
+                  ? catalogCounts.all
+                  : selectedCatalogId === "uncategorized"
+                  ? catalogCounts.uncategorized || 0
+                  : catalogCounts[selectedCatalogId] || 0})
+              </span>
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-              onClick={() => handleDeleteCatalog(cat.id)}
-              title="Remover pasta"
-            >
-              <Trash2 className="h-3 w-3" />
-            </Button>
-          </div>
-        ))}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-56 max-h-80 overflow-y-auto">
+            <DropdownMenuItem onClick={() => setSelectedCatalogId("all")} className="gap-2">
+              <FolderOpen className="h-4 w-4" />
+              Todas as pastas
+              <span className="ml-auto text-xs text-muted-foreground">{catalogCounts.all}</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setSelectedCatalogId("uncategorized")} className="gap-2">
+              <Folder className="h-4 w-4" />
+              Sem pasta
+              <span className="ml-auto text-xs text-muted-foreground">{catalogCounts.uncategorized || 0}</span>
+            </DropdownMenuItem>
+            {catalogs.length > 0 && <DropdownMenuSeparator />}
+            {catalogs.map(cat => (
+              <DropdownMenuItem key={cat.id} className="gap-2 group" onClick={() => setSelectedCatalogId(cat.id)}>
+                <Folder className="h-4 w-4" />
+                <span className="flex-1 truncate">{cat.name}</span>
+                <span className="text-xs text-muted-foreground">{catalogCounts[cat.id] || 0}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+                  onClick={(e) => { e.stopPropagation(); handleDeleteCatalog(cat.id); }}
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
         {showNewCatalogInput ? (
           <div className="flex items-center gap-1">
             <Input

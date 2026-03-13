@@ -527,7 +527,7 @@ export default function Catalog() {
         }
 
         currentStep += batch.length;
-        setFetchProgress({ current: currentStep, total: totalSteps, currentName: "", found: foundImages });
+        setFetchProgress({ current: currentStep, total: totalSteps, currentName: "", found: foundImages, catalogName: currentCatalogName });
         // Refresh products after each batch for visual feedback
         queryClient.invalidateQueries({ queryKey: ["products"] });
       }

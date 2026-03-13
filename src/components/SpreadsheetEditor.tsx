@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
 import { Wand2, Image as ImageIcon, Loader2, Globe, Zap, Pencil, Settings, Check, ExternalLink, Filter, X, FolderInput, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -45,6 +46,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
   const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
   const [scrapingId, setScrapingId] = useState<string | null>(null);
   const [bulkEnriching, setBulkEnriching] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, label: "" });
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
@@ -306,93 +308,148 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
   return (
     <div className="space-y-3">
       {selectedProducts.size > 0 && (
-        <div className="flex items-center gap-3 p-2 bg-muted/50 rounded-lg border flex-wrap">
-          <span className="text-sm font-medium">{selectedProducts.size} selecionados</span>
-          <Button size="sm" onClick={bulkEnrich} disabled={bulkEnriching}>
-            {bulkEnriching ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Globe className="mr-2 h-3 w-3" />}
-            Web Scrape
-          </Button>
-          <Button size="sm" variant="secondary" onClick={async () => {
-            const selected = products.filter(p => selectedProducts.has(p.id));
-            if (selected.length === 0) return;
-            setBulkEnriching(true);
-            toast({ title: `Enriquecendo ${selected.length} produtos com IA...` });
-            let enriched = 0;
-            for (const p of selected) {
-              try { await enrichProduct(p); enriched++; } catch {}
-            }
-            toast({ title: `${enriched} produtos enriquecidos com IA!` });
-            setBulkEnriching(false);
-            setSelectedProducts(new Set());
-          }} disabled={bulkEnriching}>
-            <Wand2 className="mr-2 h-3 w-3" />IA Enriquecer
-          </Button>
-          <Button size="sm" variant="secondary" onClick={async () => {
-            const selected = products.filter(p => selectedProducts.has(p.id));
-            if (selected.length === 0) return;
-            setBulkEnriching(true);
-            toast({ title: `Gerando imagens para ${selected.length} produtos...` });
-            let generated = 0;
-            for (const p of selected) {
-              try { await generateImage(p); generated++; } catch {}
-            }
-            toast({ title: `${generated} imagens geradas!` });
-            setBulkEnriching(false);
-            setSelectedProducts(new Set());
-          }} disabled={bulkEnriching}>
-            <ImageIcon className="mr-2 h-3 w-3" />Gerar Imagens
-          </Button>
-          <Button size="sm" variant="outline" onClick={async () => {
-            const selected = products.filter(p => selectedProducts.has(p.id));
-            let approved = 0;
-            for (const p of selected) {
-              try {
-                const slug = slugify(p.optimized_title || p.seo_title || p.name);
-                const score = calcSeoScore(p);
-                await updateProduct.mutateAsync({ id: p.id, slug, seo_score: score, status: "active" });
-                approved++;
-              } catch {}
-            }
-            toast({ title: `${approved} produtos aprovados!` });
-            setSelectedProducts(new Set());
-          }}>
-            <Check className="mr-2 h-3 w-3" />Aprovar
-          </Button>
-          <div className="flex items-center gap-1">
-            <FolderInput className="h-3.5 w-3.5 text-muted-foreground" />
-            <Select onValueChange={async (catalogId) => {
-              const ids = Array.from(selectedProducts);
-              const value = catalogId === "none" ? null : catalogId;
-              let moved = 0;
-              for (const id of ids) {
-                try { await updateProduct.mutateAsync({ id, catalog_id: value } as any); moved++; } catch {}
+        <div className="space-y-2">
+          <div className="flex items-center gap-3 p-2 bg-muted/50 rounded-lg border flex-wrap">
+            <span className="text-sm font-medium">{selectedProducts.size} selecionados</span>
+            <Button size="sm" onClick={async () => {
+              const selected = products.filter(p => selectedProducts.has(p.id));
+              if (selected.length === 0) return;
+              setBulkEnriching(true);
+              setBulkProgress({ current: 0, total: selected.length, label: "Web Scrape" });
+              const { data, error } = await supabase.functions.invoke("web-scrape-product", {
+                body: { action: "bulk_enrich", products: selected.map(p => ({ id: p.id, name: p.name, sku: p.sku, supplier_url: p.supplier_url })) },
+              });
+              if (!error && data?.success && data?.results) {
+                let enriched = 0;
+                for (const result of data.results) {
+                  if (result.success && result.enriched) {
+                    const updates: any = { id: result.product_id, last_enriched_at: new Date().toISOString(), enrichment_phase: 1 };
+                    if (result.enriched.description) updates.description = result.enriched.description;
+                    if (result.enriched.brand) updates.brand = result.enriched.brand;
+                    if (result.enriched.seo_title) { updates.optimized_title = result.enriched.seo_title; updates.slug = slugify(result.enriched.seo_title); }
+                    if (result.enriched.meta_description) updates.meta_description = result.enriched.meta_description;
+                    if (result.enriched.specifications) updates.specifications = result.enriched.specifications;
+                    if (result.enriched.tags) updates.tags = result.enriched.tags;
+                    try { await updateProduct.mutateAsync(updates); enriched++; } catch {}
+                  }
+                  setBulkProgress(prev => ({ ...prev, current: prev.current + 1 }));
+                }
+                toast({ title: `${enriched} de ${selected.length} produtos enriquecidos!` });
+              } else {
+                toast({ title: "Erro no web scrape", variant: "destructive" });
               }
-              toast({ title: `${moved} produtos movidos!` });
+              setBulkEnriching(false);
+              setBulkProgress({ current: 0, total: 0, label: "" });
+              setSelectedProducts(new Set());
+            }} disabled={bulkEnriching}>
+              {bulkEnriching && bulkProgress.label === "Web Scrape" ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Globe className="mr-2 h-3 w-3" />}
+              Web Scrape
+            </Button>
+            <Button size="sm" variant="secondary" onClick={async () => {
+              const selected = products.filter(p => selectedProducts.has(p.id));
+              if (selected.length === 0) return;
+              setBulkEnriching(true);
+              setBulkProgress({ current: 0, total: selected.length, label: "IA Enriquecer" });
+              let enriched = 0;
+              for (const p of selected) {
+                try { await enrichProduct(p); enriched++; } catch {}
+                setBulkProgress(prev => ({ ...prev, current: prev.current + 1 }));
+              }
+              toast({ title: `${enriched} produtos enriquecidos com IA!` });
+              setBulkEnriching(false);
+              setBulkProgress({ current: 0, total: 0, label: "" });
+              setSelectedProducts(new Set());
+            }} disabled={bulkEnriching}>
+              {bulkEnriching && bulkProgress.label === "IA Enriquecer" ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Wand2 className="mr-2 h-3 w-3" />}
+              IA Enriquecer
+            </Button>
+            <Button size="sm" variant="secondary" onClick={async () => {
+              const selected = products.filter(p => selectedProducts.has(p.id));
+              if (selected.length === 0) return;
+              setBulkEnriching(true);
+              setBulkProgress({ current: 0, total: selected.length, label: "Gerar Imagens" });
+              let generated = 0;
+              for (const p of selected) {
+                try { await generateImage(p); generated++; } catch {}
+                setBulkProgress(prev => ({ ...prev, current: prev.current + 1 }));
+              }
+              toast({ title: `${generated} imagens geradas!` });
+              setBulkEnriching(false);
+              setBulkProgress({ current: 0, total: 0, label: "" });
+              setSelectedProducts(new Set());
+            }} disabled={bulkEnriching}>
+              {bulkEnriching && bulkProgress.label === "Gerar Imagens" ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <ImageIcon className="mr-2 h-3 w-3" />}
+              Gerar Imagens
+            </Button>
+            <Button size="sm" variant="outline" onClick={async () => {
+              const selected = products.filter(p => selectedProducts.has(p.id));
+              setBulkProgress({ current: 0, total: selected.length, label: "Aprovar" });
+              let approved = 0;
+              for (const p of selected) {
+                try {
+                  const slug = slugify(p.optimized_title || p.seo_title || p.name);
+                  const score = calcSeoScore(p);
+                  await updateProduct.mutateAsync({ id: p.id, slug, seo_score: score, status: "active" });
+                  approved++;
+                } catch {}
+                setBulkProgress(prev => ({ ...prev, current: prev.current + 1 }));
+              }
+              toast({ title: `${approved} produtos aprovados!` });
+              setBulkProgress({ current: 0, total: 0, label: "" });
               setSelectedProducts(new Set());
             }}>
-              <SelectTrigger className="h-7 text-xs w-36">
-                <SelectValue placeholder="Mover para..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Sem pasta</SelectItem>
-                {catalogs.map(c => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <Check className="mr-2 h-3 w-3" />Aprovar
+            </Button>
+            <div className="flex items-center gap-1">
+              <FolderInput className="h-3.5 w-3.5 text-muted-foreground" />
+              <Select onValueChange={async (catalogId) => {
+                const ids = Array.from(selectedProducts);
+                const value = catalogId === "none" ? null : catalogId;
+                setBulkProgress({ current: 0, total: ids.length, label: "Mover" });
+                let moved = 0;
+                for (const id of ids) {
+                  try { await updateProduct.mutateAsync({ id, catalog_id: value } as any); moved++; } catch {}
+                  setBulkProgress(prev => ({ ...prev, current: prev.current + 1 }));
+                }
+                toast({ title: `${moved} produtos movidos!` });
+                setBulkProgress({ current: 0, total: 0, label: "" });
+                setSelectedProducts(new Set());
+              }}>
+                <SelectTrigger className="h-7 text-xs w-36">
+                  <SelectValue placeholder="Mover para..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Sem pasta</SelectItem>
+                  {catalogs.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button variant="destructive" size="sm" onClick={async () => {
+              const ids = Array.from(selectedProducts);
+              setBulkProgress({ current: 0, total: ids.length, label: "Apagar" });
+              let deleted = 0;
+              for (const id of ids) {
+                try { await deleteProduct.mutateAsync(id); deleted++; } catch {}
+                setBulkProgress(prev => ({ ...prev, current: prev.current + 1 }));
+              }
+              toast({ title: `${deleted} produtos apagados!` });
+              setBulkProgress({ current: 0, total: 0, label: "" });
+              setSelectedProducts(new Set());
+            }}>
+              <Trash2 className="mr-2 h-3 w-3" />Apagar
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setSelectedProducts(new Set())}>Limpar</Button>
           </div>
-          <Button variant="destructive" size="sm" onClick={async () => {
-            const ids = Array.from(selectedProducts);
-            let deleted = 0;
-            for (const id of ids) {
-              try { await deleteProduct.mutateAsync(id); deleted++; } catch {}
-            }
-            toast({ title: `${deleted} produtos apagados!` });
-            setSelectedProducts(new Set());
-          }}>
-            <Trash2 className="mr-2 h-3 w-3" />Apagar
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setSelectedProducts(new Set())}>Limpar</Button>
+          {bulkProgress.total > 0 && (
+            <div className="flex items-center gap-3 px-2">
+              <Progress value={(bulkProgress.current / bulkProgress.total) * 100} className="flex-1 h-2" />
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                {bulkProgress.label}: {bulkProgress.current}/{bulkProgress.total}
+              </span>
+            </div>
+          )}
         </div>
       )}
 

@@ -1,16 +1,16 @@
-import { useState, useCallback } from "react";
-import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, Product } from "@/hooks/useProducts";
+import { useState, useCallback, useMemo } from "react";
+import { useProducts, useCreateProduct, useUpdateProduct, Product } from "@/hooks/useProducts";
 import { useCategories } from "@/hooks/useCategories";
+import { useCatalogs, useCreateCatalog, useDeleteCatalog } from "@/hooks/useCatalogs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Pencil, Search, Upload, Sheet, FileUp, Loader2 } from "lucide-react";
+import { Plus, Upload, Sheet, FileUp, Loader2, FolderPlus, Folder, FolderOpen, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { SpreadsheetEditor } from "@/components/SpreadsheetEditor";
 import { WooCommerceSync } from "@/components/WooCommerceSync";
@@ -19,24 +19,50 @@ import { supabase } from "@/integrations/supabase/client";
 export default function Catalog() {
   const { data: products = [], isLoading } = useProducts();
   const { data: categories = [] } = useCategories();
+  const { data: catalogs = [] } = useCatalogs();
   const createProduct = useCreateProduct();
   const updateProduct = useUpdateProduct();
+  const createCatalog = useCreateCatalog();
+  const deleteCatalog = useDeleteCatalog();
   const { toast } = useToast();
 
-  const [search, setSearch] = useState("");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [importing, setImporting] = useState(false);
+  const [selectedCatalogId, setSelectedCatalogId] = useState<string>("all");
+  const [newCatalogName, setNewCatalogName] = useState("");
+  const [showNewCatalogInput, setShowNewCatalogInput] = useState(false);
 
-  const filtered = products.filter((p) => {
-    const q = search.toLowerCase();
-    if (q && !p.name.toLowerCase().includes(q) && !(p.sku || "").toLowerCase().includes(q)) return false;
-    if (filterStatus !== "all" && p.status !== filterStatus) return false;
-    return true;
-  });
+  // Filter products by selected catalog
+  const filteredProducts = useMemo(() => {
+    if (selectedCatalogId === "all") return products;
+    if (selectedCatalogId === "uncategorized") return products.filter(p => !p.catalog_id);
+    return products.filter(p => p.catalog_id === selectedCatalogId);
+  }, [products, selectedCatalogId]);
 
-  // Excel/CSV import
+  // Count products per catalog
+  const catalogCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: products.length, uncategorized: 0 };
+    for (const p of products) {
+      if (!p.catalog_id) { counts.uncategorized++; continue; }
+      counts[p.catalog_id] = (counts[p.catalog_id] || 0) + 1;
+    }
+    return counts;
+  }, [products]);
+
+  const handleCreateCatalog = async () => {
+    if (!newCatalogName.trim()) return;
+    await createCatalog.mutateAsync(newCatalogName.trim());
+    setNewCatalogName("");
+    setShowNewCatalogInput(false);
+  };
+
+  const handleDeleteCatalog = async (id: string) => {
+    await deleteCatalog.mutateAsync(id);
+    if (selectedCatalogId === id) setSelectedCatalogId("all");
+  };
+
+  // Excel/CSV import — assigns to selected catalog
   const handleFileImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -73,6 +99,8 @@ export default function Catalog() {
         return;
       }
 
+      const catalogId = selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized" ? selectedCatalogId : null;
+
       let imported = 0;
       for (const row of rows) {
         const name = row.name || row.nome || row["título"] || row.titulo || row.title || row["product name"] || row.produto || "";
@@ -88,7 +116,8 @@ export default function Catalog() {
             brand: row.brand || row.marca || null,
             supplier_url: row.supplier_url || row.url || row.fornecedor_url || null,
             status: "draft",
-          });
+            catalog_id: catalogId,
+          } as any);
           imported++;
         } catch {}
       }
@@ -98,7 +127,7 @@ export default function Catalog() {
     }
     setImporting(false);
     e.target.value = "";
-  }, [createProduct, toast]);
+  }, [createProduct, toast, selectedCatalogId]);
 
   // PDF import
   const handlePdfImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -127,6 +156,8 @@ export default function Catalog() {
       const { data, error } = await supabase.functions.invoke("extract-products", { body: { text: fullText } });
       if (error) throw error;
 
+      const catalogId = selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized" ? selectedCatalogId : null;
+
       if (data.success && data.products?.length > 0) {
         let imported = 0;
         for (const p of data.products) {
@@ -140,7 +171,8 @@ export default function Catalog() {
               stock: p.stock || 0,
               brand: p.brand || null,
               status: "draft",
-            });
+              catalog_id: catalogId,
+            } as any);
             imported++;
           } catch {}
         }
@@ -153,7 +185,7 @@ export default function Catalog() {
     }
     setImporting(false);
     e.target.value = "";
-  }, [createProduct, toast]);
+  }, [createProduct, toast, selectedCatalogId]);
 
   return (
     <div className="space-y-6">
@@ -183,6 +215,8 @@ export default function Catalog() {
               <ProductForm
                 product={editingProduct}
                 categories={categories}
+                catalogs={catalogs}
+                selectedCatalogId={selectedCatalogId}
                 onSubmit={async (data) => {
                   if (editingProduct) {
                     await updateProduct.mutateAsync({ id: editingProduct.id, ...data });
@@ -198,6 +232,73 @@ export default function Catalog() {
         </div>
       </div>
 
+      {/* Catalog/Folder selector */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Button
+          variant={selectedCatalogId === "all" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setSelectedCatalogId("all")}
+          className="gap-1.5"
+        >
+          <FolderOpen className="h-3.5 w-3.5" />
+          Todos
+          <span className="ml-1 text-xs opacity-70">({catalogCounts.all})</span>
+        </Button>
+        <Button
+          variant={selectedCatalogId === "uncategorized" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setSelectedCatalogId("uncategorized")}
+          className="gap-1.5"
+        >
+          <Folder className="h-3.5 w-3.5" />
+          Sem pasta
+          <span className="ml-1 text-xs opacity-70">({catalogCounts.uncategorized || 0})</span>
+        </Button>
+        {catalogs.map(cat => (
+          <div key={cat.id} className="flex items-center gap-0.5">
+            <Button
+              variant={selectedCatalogId === cat.id ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSelectedCatalogId(cat.id)}
+              className="gap-1.5"
+            >
+              <Folder className="h-3.5 w-3.5" />
+              {cat.name}
+              <span className="ml-1 text-xs opacity-70">({catalogCounts[cat.id] || 0})</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+              onClick={() => handleDeleteCatalog(cat.id)}
+              title="Remover pasta"
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+        ))}
+        {showNewCatalogInput ? (
+          <div className="flex items-center gap-1">
+            <Input
+              placeholder="Nome da pasta..."
+              value={newCatalogName}
+              onChange={e => setNewCatalogName(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleCreateCatalog(); if (e.key === "Escape") setShowNewCatalogInput(false); }}
+              className="h-8 w-40 text-sm"
+              autoFocus
+            />
+            <Button size="sm" onClick={handleCreateCatalog} disabled={!newCatalogName.trim()}>
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ) : (
+          <Button variant="outline" size="sm" onClick={() => setShowNewCatalogInput(true)} className="gap-1.5 border-dashed">
+            <FolderPlus className="h-3.5 w-3.5" />
+            Nova Pasta
+          </Button>
+        )}
+      </div>
+
       <Tabs defaultValue="spreadsheet" className="space-y-4">
         <TabsList>
           <TabsTrigger value="spreadsheet" className="gap-2"><Sheet className="h-4 w-4" />Planilha</TabsTrigger>
@@ -207,15 +308,21 @@ export default function Catalog() {
         <TabsContent value="spreadsheet">
           <Card>
             <CardHeader>
-              <p className="text-xs text-muted-foreground">💡 Importe Excel/PDF e os produtos aparecem aqui. Duplo clique para editar. Use IA para enriquecer.</p>
+              <p className="text-xs text-muted-foreground">
+                💡 Importe Excel/PDF e os produtos aparecem aqui. Selecione uma pasta antes de importar para organizar.
+              </p>
             </CardHeader>
             <CardContent>
               {isLoading ? (
                 <p className="text-muted-foreground text-sm">Carregando...</p>
-              ) : products.length === 0 ? (
-                <p className="text-muted-foreground text-sm text-center py-8">Nenhum produto encontrado. Importe um ficheiro Excel ou PDF.</p>
+              ) : filteredProducts.length === 0 ? (
+                <p className="text-muted-foreground text-sm text-center py-8">
+                  {products.length === 0
+                    ? "Nenhum produto encontrado. Importe um ficheiro Excel ou PDF."
+                    : "Nenhum produto nesta pasta."}
+                </p>
               ) : (
-                <SpreadsheetEditor products={products} />
+                <SpreadsheetEditor products={filteredProducts} />
               )}
             </CardContent>
           </Card>
@@ -232,16 +339,23 @@ export default function Catalog() {
 function ProductForm({
   product,
   categories,
+  catalogs,
+  selectedCatalogId,
   onSubmit,
 }: {
   product: Product | null;
   categories: { id: string; name: string }[];
+  catalogs: { id: string; name: string }[];
+  selectedCatalogId: string;
   onSubmit: (data: any) => Promise<void>;
 }) {
   const [name, setName] = useState(product?.name || "");
   const [description, setDescription] = useState(product?.description || "");
   const [sku, setSku] = useState(product?.sku || "");
   const [categoryId, setCategoryId] = useState(product?.category_id || "none");
+  const [catalogId, setCatalogId] = useState(
+    (product as any)?.catalog_id || (selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized" ? selectedCatalogId : "none")
+  );
   const [cost, setCost] = useState(product?.cost?.toString() || "0");
   const [price, setPrice] = useState(product?.price?.toString() || "0");
   const [stock, setStock] = useState(product?.stock?.toString() || "0");
@@ -256,6 +370,7 @@ function ProductForm({
       description: description || null,
       sku: sku || null,
       category_id: categoryId === "none" ? null : categoryId,
+      catalog_id: catalogId === "none" ? null : catalogId,
       cost: parseFloat(cost),
       price: parseFloat(price),
       stock: parseInt(stock),
@@ -308,17 +423,31 @@ function ProductForm({
           </Select>
         </div>
       </div>
-      <div className="space-y-2">
-        <Label>Categoria</Label>
-        <Select value={categoryId} onValueChange={setCategoryId}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="none">Sem categoria</SelectItem>
-            {categories.map((c) => (
-              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Categoria</Label>
+          <Select value={categoryId} onValueChange={setCategoryId}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Sem categoria</SelectItem>
+              {categories.map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Pasta</Label>
+          <Select value={catalogId} onValueChange={setCatalogId}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">Sem pasta</SelectItem>
+              {catalogs.map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       <Button type="submit" className="w-full" disabled={loading}>
         {loading ? "Salvando..." : product ? "Atualizar" : "Criar Produto"}

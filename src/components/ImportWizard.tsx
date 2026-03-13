@@ -326,6 +326,11 @@ export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWi
     });
   };
 
+  const isExistingProduct = (p: ParsedProduct) => {
+    if (p.sku && existingSkus.has(p.sku.toLowerCase().trim())) return true;
+    return existingNames.has(p.name.toLowerCase().trim());
+  };
+
   const filteredProducts = useMemo(() => {
     if (!searchTerm) return mergedProducts.map((p, i) => ({ ...p, _idx: i }));
     const term = searchTerm.toLowerCase();
@@ -333,6 +338,9 @@ export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWi
       .map((p, i) => ({ ...p, _idx: i }))
       .filter((p) => p.name.toLowerCase().includes(term) || (p.sku && p.sku.toLowerCase().includes(term)));
   }, [mergedProducts, searchTerm]);
+
+  const newCount = useMemo(() => mergedProducts.filter((p) => !isExistingProduct(p)).length, [mergedProducts, existingSkus, existingNames]);
+  const updateCount = mergedProducts.length - newCount;
 
   const handleConfirm = async () => {
     const selected = mergedProducts.filter((_, i) => selectedIds.has(i));

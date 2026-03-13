@@ -672,7 +672,7 @@ export default function Catalog() {
           }}>
             <FileUp className="mr-2 h-4 w-4" />PDF
           </Button>
-          <Button variant="outline" disabled={fetchingImages} onClick={fetchMissingImages}>
+          <Button variant="outline" disabled={fetchingImages} onClick={() => setImageDialogOpen(true)}>
             {fetchingImages ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
             Buscar Imagens
           </Button>

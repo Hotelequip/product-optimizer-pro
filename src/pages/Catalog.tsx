@@ -207,30 +207,15 @@ export default function Catalog() {
         <TabsContent value="spreadsheet">
           <Card>
             <CardHeader>
-              <div className="flex flex-wrap gap-3">
-                <div className="relative flex-1 min-w-[200px]">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="Buscar por nome ou SKU..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-                </div>
-                <Select value={filterStatus} onValueChange={setFilterStatus}>
-                  <SelectTrigger className="w-[130px]"><SelectValue placeholder="Status" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="active">Publicado</SelectItem>
-                    <SelectItem value="inactive">Inativo</SelectItem>
-                    <SelectItem value="draft">Pendente</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">💡 Importe Excel/PDF e os produtos aparecem aqui. Duplo clique para editar. Use IA para enriquecer.</p>
+              <p className="text-xs text-muted-foreground">💡 Importe Excel/PDF e os produtos aparecem aqui. Duplo clique para editar. Use IA para enriquecer.</p>
             </CardHeader>
             <CardContent>
               {isLoading ? (
                 <p className="text-muted-foreground text-sm">Carregando...</p>
-              ) : filtered.length === 0 ? (
+              ) : products.length === 0 ? (
                 <p className="text-muted-foreground text-sm text-center py-8">Nenhum produto encontrado. Importe um ficheiro Excel ou PDF.</p>
               ) : (
-                <SpreadsheetEditor products={filtered} />
+                <SpreadsheetEditor products={products} />
               )}
             </CardContent>
           </Card>

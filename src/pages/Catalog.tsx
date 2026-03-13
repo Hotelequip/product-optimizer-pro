@@ -542,6 +542,7 @@ export default function Catalog() {
           total: totalSteps,
           currentName: `Enriquecendo: ${batch[0].name}`,
           found: foundImages + enriched,
+          catalogName: currentCatalogName,
         });
 
         const { data, error } = await supabase.functions.invoke("web-scrape-product", {

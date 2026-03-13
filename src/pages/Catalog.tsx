@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Upload, Sheet, FileUp, Loader2, FolderPlus, Folder, FolderOpen, Trash2 } from "lucide-react";
+import { Plus, Upload, Sheet, FileUp, Loader2, FolderPlus, Folder, FolderOpen, Trash2, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { SpreadsheetEditor } from "@/components/SpreadsheetEditor";
 import { WooCommerceSync } from "@/components/WooCommerceSync";
@@ -33,6 +33,7 @@ export default function Catalog() {
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>("all");
   const [newCatalogName, setNewCatalogName] = useState("");
   const [showNewCatalogInput, setShowNewCatalogInput] = useState(false);
+  const [catalogSearch, setCatalogSearch] = useState("");
 
   // Filter products by selected catalog
   const filteredProducts = useMemo(() => {
@@ -253,19 +254,39 @@ export default function Catalog() {
               </span>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-56 max-h-80 overflow-y-auto">
-            <DropdownMenuItem onClick={() => setSelectedCatalogId("all")} className="gap-2">
-              <FolderOpen className="h-4 w-4" />
-              Todas as pastas
-              <span className="ml-auto text-xs text-muted-foreground">{catalogCounts.all}</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setSelectedCatalogId("uncategorized")} className="gap-2">
-              <Folder className="h-4 w-4" />
-              Sem pasta
-              <span className="ml-auto text-xs text-muted-foreground">{catalogCounts.uncategorized || 0}</span>
-            </DropdownMenuItem>
-            {catalogs.length > 0 && <DropdownMenuSeparator />}
-            {catalogs.map(cat => (
+          <DropdownMenuContent align="start" className="w-56 max-h-80 overflow-y-auto" onCloseAutoFocus={() => setCatalogSearch("")}>
+            <div className="px-2 py-1.5">
+              <div className="relative">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Pesquisar pasta..."
+                  value={catalogSearch}
+                  onChange={e => setCatalogSearch(e.target.value)}
+                  className="h-7 text-xs pl-7"
+                  onClick={e => e.stopPropagation()}
+                  onKeyDown={e => e.stopPropagation()}
+                />
+              </div>
+            </div>
+            <DropdownMenuSeparator />
+            {!catalogSearch && (
+              <>
+                <DropdownMenuItem onClick={() => setSelectedCatalogId("all")} className="gap-2">
+                  <FolderOpen className="h-4 w-4" />
+                  Todas as pastas
+                  <span className="ml-auto text-xs text-muted-foreground">{catalogCounts.all}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setSelectedCatalogId("uncategorized")} className="gap-2">
+                  <Folder className="h-4 w-4" />
+                  Sem pasta
+                  <span className="ml-auto text-xs text-muted-foreground">{catalogCounts.uncategorized || 0}</span>
+                </DropdownMenuItem>
+                {catalogs.length > 0 && <DropdownMenuSeparator />}
+              </>
+            )}
+            {catalogs
+              .filter(cat => !catalogSearch || cat.name.toLowerCase().includes(catalogSearch.toLowerCase()))
+              .map(cat => (
               <DropdownMenuItem key={cat.id} className="gap-2 group" onClick={() => setSelectedCatalogId(cat.id)}>
                 <Folder className="h-4 w-4" />
                 <span className="flex-1 truncate">{cat.name}</span>
@@ -280,6 +301,9 @@ export default function Catalog() {
                 </Button>
               </DropdownMenuItem>
             ))}
+            {catalogSearch && catalogs.filter(cat => cat.name.toLowerCase().includes(catalogSearch.toLowerCase())).length === 0 && (
+              <div className="px-2 py-3 text-xs text-muted-foreground text-center">Nenhuma pasta encontrada</div>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
 

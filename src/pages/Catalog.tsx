@@ -453,6 +453,7 @@ export default function Catalog() {
   // Fetch images + enrich data for products
   const fetchAndEnrich = async (baseUrl?: string, alsoEnrich?: boolean) => {
     if (!user || fetchingImages) return;
+    cancelRef.current = false;
     setFetchingImages(true);
     setImageDialogOpen(false);
     setFetchProgress(null);

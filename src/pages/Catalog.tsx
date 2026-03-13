@@ -1627,6 +1627,7 @@ function DetailField({ label, value, maxLines }: { label: string; value?: string
 }
 
 
+function ImageGalleryTab({ products }: { products: Product[] }) {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [generatingAi, setGeneratingAi] = useState(false);
   const [optimizing, setOptimizing] = useState(false);

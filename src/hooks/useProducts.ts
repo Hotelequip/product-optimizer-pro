@@ -28,6 +28,7 @@ export interface Product {
   catalog_id: string | null;
   short_description: string | null;
   optimized_title: string | null;
+  product_type: string;
   created_at: string;
   updated_at: string;
 }

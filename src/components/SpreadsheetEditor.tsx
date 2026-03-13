@@ -120,7 +120,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
       });
       if (error) throw error;
       if (data.success && data.enriched) {
-        const slug = slugify(data.enriched.seo_title || data.enriched.optimized_title || product.name);
+        const slug = slugify(data.enriched.slug || data.enriched.seo_title || data.enriched.optimized_title || product.name);
         await updateProduct.mutateAsync({
           id: product.id,
           description: data.enriched.description || product.description,
@@ -130,6 +130,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
           seo_title: data.enriched.seo_title || null,
           tags: data.enriched.tags || null,
           slug,
+          product_type: data.enriched.product_type || product.product_type || "simple",
           enrichment_phase: Math.min((product.enrichment_phase || 0) + 1, 3),
           last_enriched_at: new Date().toISOString(),
         });

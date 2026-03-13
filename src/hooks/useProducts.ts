@@ -25,6 +25,7 @@ export interface Product {
   slug: string | null;
   seo_score: number;
   enrichment_phase: number;
+  catalog_id: string | null;
   short_description: string | null;
   optimized_title: string | null;
   created_at: string;

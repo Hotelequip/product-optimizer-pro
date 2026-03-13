@@ -454,8 +454,8 @@ export default function Catalog() {
     if (!user || fetchingImages) return;
     setFetchingImages(true);
     setImageDialogOpen(false);
+    setFetchProgress(null);
     try {
-      // Filter by selected catalog
       let query = supabase
         .from("products")
         .select("id, name, sku, supplier_url, image_url, description")
@@ -475,9 +475,7 @@ export default function Catalog() {
         return;
       }
 
-      // Products without images
       const noImageProducts = allCatalogProducts.filter(p => !p.image_url);
-      // Products missing data (no description)
       const noDataProducts = alsoEnrich ? allCatalogProducts.filter(p => !p.description) : [];
 
       if (noImageProducts.length === 0 && noDataProducts.length === 0) {
@@ -486,22 +484,26 @@ export default function Catalog() {
         return;
       }
 
-      const parts: string[] = [];
-      if (noImageProducts.length > 0) parts.push(`${noImageProducts.length} imagem(ns)`);
-      if (noDataProducts.length > 0) parts.push(`${noDataProducts.length} a enriquecer`);
-
-      toast({
-        title: `A processar ${parts.join(" · ")}...`,
-        description: baseUrl ? `No site ${baseUrl}` : "Via pesquisa web. Isto pode demorar.",
-      });
-
-      // Step 1: Fetch images
+      const totalSteps = noImageProducts.length + noDataProducts.length;
+      let currentStep = 0;
       let foundImages = 0;
-      if (noImageProducts.length > 0) {
+      let enriched = 0;
+
+      // Process images in batches of 5
+      const IMG_BATCH = 5;
+      for (let i = 0; i < noImageProducts.length; i += IMG_BATCH) {
+        const batch = noImageProducts.slice(i, i + IMG_BATCH);
+        setFetchProgress({
+          current: currentStep,
+          total: totalSteps,
+          currentName: batch[0].name,
+          found: foundImages,
+        });
+
         const { data, error } = await supabase.functions.invoke("web-scrape-product", {
           body: {
             action: "fetch_images",
-            products: noImageProducts.map(p => ({ id: p.id, name: p.name, sku: p.sku, supplier_url: p.supplier_url })),
+            products: batch.map(p => ({ id: p.id, name: p.name, sku: p.sku, supplier_url: p.supplier_url })),
             base_supplier_url: baseUrl || null,
           },
         });
@@ -513,18 +515,29 @@ export default function Catalog() {
               foundImages++;
             }
           }
-        } else {
-          console.warn("Image fetch failed:", error || data?.error);
         }
+
+        currentStep += batch.length;
+        setFetchProgress({ current: currentStep, total: totalSteps, currentName: "", found: foundImages });
+        // Refresh products after each batch for visual feedback
+        queryClient.invalidateQueries({ queryKey: ["products"] });
       }
 
-      // Step 2: Enrich data for products missing descriptions
-      let enriched = 0;
-      if (noDataProducts.length > 0) {
+      // Process enrichment in batches of 5
+      const ENRICH_BATCH = 5;
+      for (let i = 0; i < noDataProducts.length; i += ENRICH_BATCH) {
+        const batch = noDataProducts.slice(i, i + ENRICH_BATCH);
+        setFetchProgress({
+          current: currentStep,
+          total: totalSteps,
+          currentName: `Enriquecendo: ${batch[0].name}`,
+          found: foundImages + enriched,
+        });
+
         const { data, error } = await supabase.functions.invoke("web-scrape-product", {
           body: {
             action: "bulk_enrich",
-            products: noDataProducts.map(p => ({ id: p.id, name: p.name, sku: p.sku, supplier_url: p.supplier_url || baseUrl || null })),
+            products: batch.map(p => ({ id: p.id, name: p.name, sku: p.sku, supplier_url: p.supplier_url || baseUrl || null })),
             base_supplier_url: baseUrl || null,
           },
         });
@@ -540,7 +553,6 @@ export default function Catalog() {
               if (r.enriched.meta_description) updates.meta_description = r.enriched.meta_description;
               if (r.enriched.tags?.length) updates.tags = r.enriched.tags;
               if (r.enriched.specifications?.length) updates.specifications = r.enriched.specifications;
-              if (r.enriched.suggested_category) updates.optimized_title = r.enriched.suggested_category;
 
               if (Object.keys(updates).length > 0) {
                 updates.last_enriched_at = new Date().toISOString();
@@ -550,11 +562,13 @@ export default function Catalog() {
               }
             }
           }
-        } else {
-          console.warn("Enrichment failed:", error || data?.error);
         }
+
+        currentStep += batch.length;
+        queryClient.invalidateQueries({ queryKey: ["products"] });
       }
 
+      setFetchProgress(null);
       queryClient.invalidateQueries({ queryKey: ["products"] });
 
       const summary: string[] = [];
@@ -571,6 +585,7 @@ export default function Catalog() {
       toast({ title: "Erro", description: e.message || "Erro ao processar.", variant: "destructive" });
     } finally {
       setFetchingImages(false);
+      setFetchProgress(null);
     }
   };
 

@@ -529,6 +529,7 @@ export default function Catalog() {
       // Process enrichment in batches of 5
       const ENRICH_BATCH = 5;
       for (let i = 0; i < noDataProducts.length; i += ENRICH_BATCH) {
+        if (cancelRef.current) break;
         const batch = noDataProducts.slice(i, i + ENRICH_BATCH);
         setFetchProgress({
           current: currentStep,

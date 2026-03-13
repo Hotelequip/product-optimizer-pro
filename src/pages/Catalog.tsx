@@ -684,14 +684,13 @@ export default function Catalog() {
             <DialogTrigger asChild>
               <Button><Plus className="mr-2 h-4 w-4" />Novo Produto</Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>{editingProduct ? "Editar Produto" : "Novo Produto"}</DialogTitle>
               </DialogHeader>
-              <ProductForm
+              <InlineProductForm
                 product={editingProduct}
                 categories={categories}
-                catalogs={catalogs}
                 selectedCatalogId={selectedCatalogId}
                 onSubmit={async (data) => {
                   if (editingProduct) {

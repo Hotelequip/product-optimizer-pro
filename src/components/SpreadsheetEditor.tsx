@@ -339,7 +339,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
             <tr className="border-b bg-muted/20">
               <td className="p-1"><Filter className="h-3 w-3 text-muted-foreground mx-auto" /></td>
               <td className="p-1"><Input placeholder="SKU..." value={columnFilters.sku || ""} onChange={e => setFilter("sku", e.target.value)} className="h-6 text-[10px] px-1" /></td>
-              <td className="p-1"></td>
+              <td className="p-1"><Input placeholder="Título..." value={columnFilters.name || ""} onChange={e => setFilter("name", e.target.value)} className="h-6 text-[10px] px-1" /></td>
               <td className="p-1"></td>
               <td className="p-1"></td>
               <td className="p-1"></td>

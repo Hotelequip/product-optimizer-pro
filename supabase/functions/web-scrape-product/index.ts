@@ -394,61 +394,111 @@ Return JSON:
         try {
           let imageUrl: string | null = null;
 
-          // Strategy 1: If supplier_url exists, scrape it for images
-          if (product.supplier_url) {
-            let targetUrl = product.supplier_url;
+          // Determine the supplier URL to use
+          const effectiveSupplierUrl = product.supplier_url || base_supplier_url;
+
+          // Strategy 1: If we have a supplier URL (per-product or global), use map+scrape
+          if (effectiveSupplierUrl) {
+            let targetUrl = effectiveSupplierUrl;
             if (!targetUrl.startsWith('http')) targetUrl = `https://${targetUrl}`;
 
-            // Try to find SKU-specific page
-            if (product.sku) {
-              try {
-                const mapResp = await fetchWithRetry('https://api.firecrawl.dev/v1/map', {
-                  method: 'POST',
-                  headers: firecrawlHeaders,
-                  body: JSON.stringify({ url: targetUrl, search: product.sku, limit: 3 }),
-                });
-                if (mapResp.ok) {
-                  const mapData = await mapResp.json();
-                  const links = mapData.links || [];
-                  const skuLink = links.find((l: string) => l.toLowerCase().includes(product.sku.toLowerCase()));
-                  if (skuLink) targetUrl = skuLink;
-                  else if (links.length > 0) targetUrl = links[0];
+            // Use Firecrawl map to find the product page by SKU or name
+            const searchTerm = product.sku || product.name;
+            try {
+              console.log(`Mapping ${targetUrl} for "${searchTerm}"`);
+              const mapResp = await fetchWithRetry('https://api.firecrawl.dev/v1/map', {
+                method: 'POST',
+                headers: firecrawlHeaders,
+                body: JSON.stringify({ url: targetUrl, search: searchTerm, limit: 5 }),
+              });
+              if (mapResp.ok) {
+                const mapData = await mapResp.json();
+                const links = mapData.links || [];
+                console.log(`Found ${links.length} links for "${searchTerm}"`);
+                
+                // Try to find best matching link
+                const skuLower = (product.sku || '').toLowerCase();
+                const nameParts = product.name.toLowerCase().split(/\s+/).filter((w: string) => w.length > 2);
+                
+                const bestLink = links.find((l: string) => {
+                  const lLower = l.toLowerCase();
+                  return skuLower && lLower.includes(skuLower);
+                }) || links.find((l: string) => {
+                  const lLower = l.toLowerCase();
+                  return nameParts.some((part: string) => lLower.includes(part));
+                }) || (links.length > 0 ? links[0] : null);
+
+                if (bestLink) {
+                  console.log(`Scraping product page: ${bestLink}`);
+                  const scrapeResp = await fetchWithRetry('https://api.firecrawl.dev/v1/scrape', {
+                    method: 'POST',
+                    headers: firecrawlHeaders,
+                    body: JSON.stringify({
+                      url: bestLink,
+                      formats: ['markdown'],
+                      onlyMainContent: true,
+                      waitFor: 5000,
+                    }),
+                  });
+
+                  if (scrapeResp.ok) {
+                    const scrapeData = await scrapeResp.json();
+                    const content = scrapeData.data?.markdown || scrapeData.markdown || '';
+                    
+                    // Extract image URLs from markdown
+                    const imgRegex = /!\[.*?\]\((https?:\/\/[^\s)]+(?:\.(?:jpg|jpeg|png|webp|gif)|\/[^\s)]*(?:image|img|photo|product)[^\s)]*)[^\s)]*)\)/gi;
+                    const matches = [...content.matchAll(imgRegex)];
+                    
+                    // Filter out logos/icons
+                    const goodImgs = matches.filter((m: RegExpMatchArray) => {
+                      const url = m[1].toLowerCase();
+                      return !url.includes('logo') && !url.includes('icon') && !url.includes('favicon') && !url.includes('avatar') && !url.includes('placeholder');
+                    });
+                    
+                    if (goodImgs.length > 0) {
+                      imageUrl = goodImgs[0][1];
+                    } else if (matches.length > 0) {
+                      imageUrl = matches[0][1];
+                    }
+
+                    // Also try img src pattern
+                    if (!imageUrl) {
+                      const imgTagRegex = /src=["'](https?:\/\/[^\s"']+(?:\.(?:jpg|jpeg|png|webp|gif)|\/[^\s"']*(?:image|img|photo|product)[^\s"']*))/gi;
+                      const tagMatches = [...content.matchAll(imgTagRegex)];
+                      const goodTags = tagMatches.filter((m: RegExpMatchArray) => {
+                        const url = m[1].toLowerCase();
+                        return !url.includes('logo') && !url.includes('icon') && !url.includes('favicon');
+                      });
+                      if (goodTags.length > 0) imageUrl = goodTags[0][1];
+                      else if (tagMatches.length > 0) imageUrl = tagMatches[0][1];
+                    }
+
+                    // Use AI as last resort to extract image from page content
+                    if (!imageUrl && content.length > 100) {
+                      const aiResp = await fetchWithRetry('https://ai.gateway.lovable.dev/v1/chat/completions', {
+                        method: 'POST',
+                        headers: aiHeaders,
+                        body: JSON.stringify({
+                          model: 'google/gemini-2.5-flash-lite',
+                          messages: [{
+                            role: 'user',
+                            content: `From this product page content, find the main product image URL for "${product.name}". Look for image URLs in markdown image syntax ![...](...) or HTML img src attributes. Return ONLY the full URL starting with http. If none found, return "NONE".\n\n${content.substring(0, 5000)}`,
+                          }],
+                        }),
+                      });
+                      if (aiResp.ok) {
+                        const aiData = await aiResp.json();
+                        const aiUrl = (aiData.choices?.[0]?.message?.content || '').trim();
+                        if (aiUrl && aiUrl !== 'NONE' && aiUrl.startsWith('http')) {
+                          imageUrl = aiUrl;
+                        }
+                      }
+                    }
+                  }
                 }
-              } catch (e) {
-                console.log('Map error for image fetch:', e);
               }
-            }
-
-            const scrapeResp = await fetchWithRetry('https://api.firecrawl.dev/v1/scrape', {
-              method: 'POST',
-              headers: firecrawlHeaders,
-              body: JSON.stringify({
-                url: targetUrl,
-                formats: ['markdown', 'links'],
-                onlyMainContent: true,
-                waitFor: 5000,
-              }),
-            });
-
-            if (scrapeResp.ok) {
-              const scrapeData = await scrapeResp.json();
-              const content = scrapeData.data?.markdown || scrapeData.markdown || '';
-              
-              // Extract image URLs from markdown content
-              const imgRegex = /!\[.*?\]\((https?:\/\/[^\s)]+\.(?:jpg|jpeg|png|webp|gif)[^\s)]*)\)/gi;
-              const matches = [...content.matchAll(imgRegex)];
-              if (matches.length > 0) {
-                imageUrl = matches[0][1];
-              }
-
-              // Also check for HTML-style img tags in content
-              if (!imageUrl) {
-                const imgTagRegex = /src=["'](https?:\/\/[^\s"']+\.(?:jpg|jpeg|png|webp|gif)[^\s"']*)/gi;
-                const tagMatches = [...content.matchAll(imgTagRegex)];
-                if (tagMatches.length > 0) {
-                  imageUrl = tagMatches[0][1];
-                }
-              }
+            } catch (e) {
+              console.log('Map/scrape error for image fetch:', e);
             }
           }
 

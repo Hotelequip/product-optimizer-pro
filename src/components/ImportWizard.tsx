@@ -393,14 +393,24 @@ export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWi
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex items-center gap-3 flex-wrap px-6">
+          <div className="flex items-center gap-2 flex-wrap px-6">
             <Badge variant="secondary" className="gap-1">
               <CheckCircle2 className="h-3 w-3" />
               {mergedProducts.length} produtos
             </Badge>
+            {newCount > 0 && (
+              <Badge className="text-xs bg-primary/15 text-primary border-primary/30">
+                {newCount} novos
+              </Badge>
+            )}
+            {updateCount > 0 && (
+              <Badge className="text-xs bg-accent text-accent-foreground">
+                {updateCount} a atualizar
+              </Badge>
+            )}
             {parsedDatasets.length > 1 && (
               <Badge variant="outline" className="text-xs">
-                Dados cruzados de {parsedDatasets.length} ficheiros
+                Cruzados de {parsedDatasets.length} ficheiros
               </Badge>
             )}
             <Badge variant="outline" className="text-xs">

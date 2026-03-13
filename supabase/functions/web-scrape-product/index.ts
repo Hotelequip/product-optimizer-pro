@@ -398,9 +398,23 @@ Return JSON:
         const mdRegex = /!\[.*?\]\((https?:\/\/[^\s)]+)\)/gi;
         for (const m of content.matchAll(mdRegex)) urls.push(m[1]);
         
-        // HTML img src
-        const srcRegex = /src=["'](https?:\/\/[^\s"']+)/gi;
+        // HTML img src, data-src, data-lazy-src, data-original (lazy loading patterns)
+        const srcRegex = /(?:src|data-src|data-lazy-src|data-original|data-full|data-large_image)=["'](https?:\/\/[^\s"']+)/gi;
         for (const m of content.matchAll(srcRegex)) urls.push(m[1]);
+        
+        // srcset patterns (take largest)
+        const srcsetRegex = /srcset=["']([^"']+)/gi;
+        for (const m of content.matchAll(srcsetRegex)) {
+          const parts = m[1].split(',').map(s => s.trim());
+          for (const part of parts) {
+            const urlMatch = part.match(/(https?:\/\/[^\s]+)/);
+            if (urlMatch) urls.push(urlMatch[1]);
+          }
+        }
+        
+        // CSS background-image: url(...)
+        const bgRegex = /background-image:\s*url\(['"]?(https?:\/\/[^\s'")\]]+)/gi;
+        for (const m of content.matchAll(bgRegex)) urls.push(m[1]);
         
         // Raw URLs ending in image extensions
         const rawRegex = /(https?:\/\/[^\s"'<>]+\.(?:jpg|jpeg|png|webp|gif)(?:\?[^\s"'<>]*)?)/gi;
@@ -416,7 +430,8 @@ Return JSON:
           return !lower.includes('logo') && !lower.includes('icon') && !lower.includes('favicon') 
             && !lower.includes('avatar') && !lower.includes('placeholder') && !lower.includes('woocommerce')
             && !lower.includes('emoji') && !lower.includes('gravatar') && !lower.includes('wp-includes')
-            && !lower.includes('spinner') && !lower.includes('loading');
+            && !lower.includes('spinner') && !lower.includes('loading') && !lower.includes('blank.gif')
+            && !lower.includes('pixel') && !lower.includes('tracking') && !lower.includes('1x1');
         });
       }
 

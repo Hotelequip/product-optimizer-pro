@@ -32,6 +32,7 @@ export default function Catalog() {
   const createCatalog = useCreateCatalog();
   const deleteCatalog = useDeleteCatalog();
   const renameCatalog = useRenameCatalog();
+  const updateCatalog = useUpdateCatalog();
   const addCatalogFile = useAddCatalogFile();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -42,7 +43,10 @@ export default function Catalog() {
   const [importing, setImporting] = useState(false);
   const [selectedCatalogId, setSelectedCatalogId] = useState<string>("all");
   const [newCatalogName, setNewCatalogName] = useState("");
-  const [showNewCatalogInput, setShowNewCatalogInput] = useState(false);
+  const [newCatalogSupplierUrl, setNewCatalogSupplierUrl] = useState("");
+  const [showNewCatalogDialog, setShowNewCatalogDialog] = useState(false);
+  const [editCatalogDialogOpen, setEditCatalogDialogOpen] = useState(false);
+  const [editCatalogData, setEditCatalogData] = useState<{ id: string; name: string; supplier_url: string }>({ id: "", name: "", supplier_url: "" });
   const [catalogSearch, setCatalogSearch] = useState("");
   const [editingCatalogId, setEditingCatalogId] = useState<string | null>(null);
   const [editingCatalogName, setEditingCatalogName] = useState("");

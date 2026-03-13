@@ -179,7 +179,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
             <th className="text-left p-2 text-xs font-medium text-muted-foreground w-24">Preço</th>
             <th className="text-left p-2 text-xs font-medium text-muted-foreground w-20">Estoque</th>
             <th className="text-left p-2 text-xs font-medium text-muted-foreground w-24">Status</th>
-            <th className="text-left p-2 text-xs font-medium text-muted-foreground w-28">IA</th>
+            <th className="text-left p-2 text-xs font-medium text-muted-foreground w-36">IA</th>
           </tr>
         </thead>
         <tbody>

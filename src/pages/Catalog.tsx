@@ -900,6 +900,36 @@ export default function Catalog() {
         </Button>
       </div>
 
+      {/* Progress bar for image fetching / enrichment */}
+      {fetchProgress && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="py-4 space-y-3">
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <span className="font-medium">
+                  {fetchProgress.current}/{fetchProgress.total} produto(s)
+                </span>
+              </div>
+              <span className="text-muted-foreground">
+                {fetchProgress.found > 0 ? `${fetchProgress.found} encontrado(s)` : "A procurar..."}
+              </span>
+            </div>
+            <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+              <div
+                className="bg-primary h-full rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${fetchProgress.total > 0 ? (fetchProgress.current / fetchProgress.total) * 100 : 0}%` }}
+              />
+            </div>
+            {fetchProgress.currentName && (
+              <p className="text-xs text-muted-foreground truncate">
+                {fetchProgress.currentName}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Tabs */}
       <Tabs defaultValue="spreadsheet" className="w-full">
         <TabsList>

@@ -3,6 +3,7 @@ import { useProducts, useCreateProduct, useUpdateProduct, Product } from "@/hook
 import { useCategories } from "@/hooks/useCategories";
 import { useCatalogs, useCreateCatalog, useDeleteCatalog, useRenameCatalog } from "@/hooks/useCatalogs";
 import { useAllProductImages, useAddProductImage, useDeleteProductImage, ProductImage } from "@/hooks/useProductImages";
+import { useCatalogFiles, useAddCatalogFile, useDeleteCatalogFile } from "@/hooks/useCatalogFiles";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Upload, Sheet, FileUp, Loader2, FolderPlus, Folder, FolderOpen, Trash2, Search, Pencil, ImageIcon } from "lucide-react";
+import { Plus, Upload, Sheet, FileUp, Loader2, FolderPlus, Folder, FolderOpen, Trash2, Search, Pencil, ImageIcon, FileText, Download, File } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { SpreadsheetEditor } from "@/components/SpreadsheetEditor";
 import { WooCommerceSync } from "@/components/WooCommerceSync";
@@ -28,6 +29,7 @@ export default function Catalog() {
   const createCatalog = useCreateCatalog();
   const deleteCatalog = useDeleteCatalog();
   const renameCatalog = useRenameCatalog();
+  const addCatalogFile = useAddCatalogFile();
   const { toast } = useToast();
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -172,6 +174,22 @@ export default function Catalog() {
           imported++;
         } catch {}
       }
+      // Save file to catalog_files
+      try {
+        const fileName = `${Date.now()}-${file.name}`;
+        const { error: uploadErr } = await supabase.storage.from("catalog-files").upload(fileName, file, { upsert: true });
+        if (!uploadErr) {
+          const { data: urlData } = supabase.storage.from("catalog-files").getPublicUrl(fileName);
+          const ext2 = file.name.split(".").pop()?.toLowerCase() || "";
+          await addCatalogFile.mutateAsync({
+            catalog_id: catalogId,
+            file_name: file.name,
+            file_url: urlData.publicUrl,
+            file_type: ["xlsx", "xls", "csv"].includes(ext2) ? "excel" : "other",
+            file_size: file.size,
+          });
+        }
+      } catch {}
       toast({ title: `${imported} produtos importados de ${file.name}!` });
     } catch (err: any) {
       toast({ title: "Erro na importação", description: err.message, variant: "destructive" });
@@ -227,6 +245,21 @@ export default function Catalog() {
             imported++;
           } catch {}
         }
+        // Save PDF to catalog_files
+        try {
+          const fileName = `${Date.now()}-${file.name}`;
+          const { error: uploadErr } = await supabase.storage.from("catalog-files").upload(fileName, file, { upsert: true });
+          if (!uploadErr) {
+            const { data: urlData } = supabase.storage.from("catalog-files").getPublicUrl(fileName);
+            await addCatalogFile.mutateAsync({
+              catalog_id: catalogId,
+              file_name: file.name,
+              file_url: urlData.publicUrl,
+              file_type: "pdf",
+              file_size: file.size,
+            });
+          }
+        } catch {}
         toast({ title: `${imported} produtos importados do PDF!` });
       } else {
         toast({ title: "Nenhum produto encontrado no PDF", variant: "destructive" });
@@ -452,6 +485,7 @@ export default function Catalog() {
         <TabsList>
           <TabsTrigger value="spreadsheet" className="gap-2"><Sheet className="h-4 w-4" />Planilha</TabsTrigger>
           <TabsTrigger value="images" className="gap-2"><ImageIcon className="h-4 w-4" />Imagens</TabsTrigger>
+          <TabsTrigger value="files" className="gap-2"><FileText className="h-4 w-4" />Ficheiros</TabsTrigger>
           <TabsTrigger value="sync">🔄 WooCommerce</TabsTrigger>
         </TabsList>
 
@@ -514,6 +548,10 @@ export default function Catalog() {
               <ProductImageGallery products={filteredProducts} />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="files">
+          <CatalogFilesTab selectedCatalogId={selectedCatalogId} />
         </TabsContent>
 
         <TabsContent value="sync">
@@ -926,6 +964,132 @@ function ProductImageGallery({ products }: { products: Product[] }) {
           )}
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
+  const { data: files = [], isLoading } = useCatalogFiles(selectedCatalogId);
+  const addFile = useAddCatalogFile();
+  const deleteFile = useDeleteCatalogFile();
+  const { toast } = useToast();
+  const [uploading, setUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const catalogId = selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized" ? selectedCatalogId : null;
+
+  const uploadFile = async (file: globalThis.File) => {
+    setUploading(true);
+    try {
+      const fileName = `${Date.now()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from("catalog-files")
+        .upload(fileName, file, { upsert: true });
+      if (uploadError) throw uploadError;
+      const { data: urlData } = supabase.storage.from("catalog-files").getPublicUrl(fileName);
+
+      const ext = file.name.split(".").pop()?.toLowerCase() || "";
+      const fileType = ["xlsx", "xls", "csv"].includes(ext) ? "excel" : ext === "pdf" ? "pdf" : "other";
+
+      await addFile.mutateAsync({
+        catalog_id: catalogId,
+        file_name: file.name,
+        file_url: urlData.publicUrl,
+        file_type: fileType,
+        file_size: file.size,
+      });
+      toast({ title: `Ficheiro "${file.name}" carregado!` });
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+    setUploading(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    droppedFiles.forEach(f => uploadFile(f));
+  };
+
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const getFileIcon = (type: string) => {
+    if (type === "pdf") return <FileUp className="h-5 w-5 text-red-500" />;
+    if (type === "excel") return <Sheet className="h-5 w-5 text-emerald-500" />;
+    return <File className="h-5 w-5 text-muted-foreground" />;
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Upload zone */}
+      <div
+        className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer ${
+          isDragging ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground/50"
+        }`}
+        onDrop={handleDrop}
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={(e) => { e.preventDefault(); setIsDragging(false); }}
+        onClick={() => {
+          const input = document.createElement("input");
+          input.type = "file";
+          input.multiple = true;
+          input.accept = ".xlsx,.xls,.csv,.pdf,.doc,.docx,.txt,.zip";
+          input.onchange = (ev) => {
+            const selectedFiles = Array.from((ev.target as HTMLInputElement).files || []);
+            selectedFiles.forEach(f => uploadFile(f));
+          };
+          input.click();
+        }}
+      >
+        <Upload className={`h-8 w-8 mx-auto mb-2 ${isDragging ? "text-primary animate-bounce" : "text-muted-foreground"}`} />
+        <p className="text-sm font-medium">
+          {uploading ? "Carregando..." : "Arraste ficheiros para aqui"}
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">Excel, CSV, PDF ou outros · ou clique para procurar</p>
+      </div>
+
+      {/* File list */}
+      <Card>
+        <CardContent className="pt-4">
+          {isLoading ? (
+            <p className="text-muted-foreground text-sm">Carregando...</p>
+          ) : files.length === 0 ? (
+            <p className="text-muted-foreground text-sm text-center py-6">Nenhum ficheiro associado a esta pasta.</p>
+          ) : (
+            <div className="space-y-2">
+              {files.map(f => (
+                <div key={f.id} className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/30 transition-colors group">
+                  {getFileIcon(f.file_type)}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{f.file_name}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {formatSize(f.file_size)} · {new Date(f.created_at).toLocaleDateString("pt-PT")}
+                    </p>
+                  </div>
+                  <a href={f.file_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+                    <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                      <Download className="h-3.5 w-3.5" />
+                    </Button>
+                  </a>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+                    onClick={() => { deleteFile.mutate(f.id); toast({ title: "Ficheiro eliminado" }); }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

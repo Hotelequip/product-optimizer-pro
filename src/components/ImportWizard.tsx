@@ -182,6 +182,8 @@ export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWi
   const [mergedProducts, setMergedProducts] = useState<ParsedProduct[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [searchTerm, setSearchTerm] = useState("");
+  const [existingSkus, setExistingSkus] = useState<Set<string>>(new Set());
+  const [existingNames, setExistingNames] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
 
@@ -195,6 +197,8 @@ export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWi
       setMergedProducts([]);
       setSelectedIds(new Set());
       setSearchTerm("");
+      setExistingSkus(new Set());
+      setExistingNames(new Set());
       setError(null);
       setImporting(false);
       runPipeline();
@@ -261,6 +265,22 @@ export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWi
       setSelectedIds(new Set(products.map((_, i) => i)));
     }
 
+    // Phase 3: Fetch existing products to mark new vs update
+    setStatusMessage("A verificar produtos existentes...");
+    try {
+      const { data: existingProducts } = await supabase
+        .from("products")
+        .select("sku, name");
+      const skus = new Set<string>();
+      const names = new Set<string>();
+      for (const p of existingProducts || []) {
+        if (p.sku) skus.add(String(p.sku).toLowerCase().trim());
+        names.add(String(p.name).toLowerCase().trim());
+      }
+      setExistingSkus(skus);
+      setExistingNames(names);
+    } catch {}
+
     setParseProgress(100);
     setStep("review");
   };
@@ -306,6 +326,11 @@ export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWi
     });
   };
 
+  const isExistingProduct = (p: ParsedProduct) => {
+    if (p.sku && existingSkus.has(p.sku.toLowerCase().trim())) return true;
+    return existingNames.has(p.name.toLowerCase().trim());
+  };
+
   const filteredProducts = useMemo(() => {
     if (!searchTerm) return mergedProducts.map((p, i) => ({ ...p, _idx: i }));
     const term = searchTerm.toLowerCase();
@@ -313,6 +338,9 @@ export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWi
       .map((p, i) => ({ ...p, _idx: i }))
       .filter((p) => p.name.toLowerCase().includes(term) || (p.sku && p.sku.toLowerCase().includes(term)));
   }, [mergedProducts, searchTerm]);
+
+  const newCount = useMemo(() => mergedProducts.filter((p) => !isExistingProduct(p)).length, [mergedProducts, existingSkus, existingNames]);
+  const updateCount = mergedProducts.length - newCount;
 
   const handleConfirm = async () => {
     const selected = mergedProducts.filter((_, i) => selectedIds.has(i));
@@ -365,14 +393,24 @@ export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWi
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex items-center gap-3 flex-wrap px-6">
+          <div className="flex items-center gap-2 flex-wrap px-6">
             <Badge variant="secondary" className="gap-1">
               <CheckCircle2 className="h-3 w-3" />
               {mergedProducts.length} produtos
             </Badge>
+            {newCount > 0 && (
+              <Badge className="text-xs bg-primary/15 text-primary border-primary/30">
+                {newCount} novos
+              </Badge>
+            )}
+            {updateCount > 0 && (
+              <Badge className="text-xs bg-accent text-accent-foreground">
+                {updateCount} a atualizar
+              </Badge>
+            )}
             {parsedDatasets.length > 1 && (
               <Badge variant="outline" className="text-xs">
-                Dados cruzados de {parsedDatasets.length} ficheiros
+                Cruzados de {parsedDatasets.length} ficheiros
               </Badge>
             )}
             <Badge variant="outline" className="text-xs">
@@ -414,7 +452,16 @@ export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWi
                       <Checkbox checked={selectedIds.has(p._idx)} onCheckedChange={() => toggleOne(p._idx)} />
                     </td>
                     <td className="p-2 font-mono text-muted-foreground">{p.sku || "—"}</td>
-                    <td className="p-2 max-w-[200px] truncate font-medium">{p.name}</td>
+                    <td className="p-2 max-w-[200px] font-medium">
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate">{p.name}</span>
+                        {isExistingProduct(p) ? (
+                          <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-accent text-accent-foreground font-medium">Atualizar</span>
+                        ) : (
+                          <span className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-medium">Novo</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="p-2 text-right">{p.cost ? `€${p.cost.toFixed(2)}` : "—"}</td>
                     <td className="p-2 text-right">{p.price ? `€${p.price.toFixed(2)}` : "—"}</td>
                     <td className="p-2 text-right">{p.stock || "—"}</td>

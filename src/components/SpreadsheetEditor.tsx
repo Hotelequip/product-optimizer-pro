@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
-import { Product, useUpdateProduct } from "@/hooks/useProducts";
+import { Product, useUpdateProduct, useDeleteProduct } from "@/hooks/useProducts";
 import { useCategories } from "@/hooks/useCategories";
+import { useCatalogs } from "@/hooks/useCatalogs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -8,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Wand2, Image as ImageIcon, Loader2, Globe, Zap, Pencil, Settings, Check, ExternalLink, Filter, X } from "lucide-react";
+import { Wand2, Image as ImageIcon, Loader2, Globe, Zap, Pencil, Settings, Check, ExternalLink, Filter, X, FolderInput, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -34,6 +35,8 @@ function calcSeoScore(p: Product): number {
 
 export function SpreadsheetEditor({ products }: { products: Product[] }) {
   const updateProduct = useUpdateProduct();
+  const deleteProduct = useDeleteProduct();
+  const { data: catalogs = [] } = useCatalogs();
   const { data: categories = [] } = useCategories();
   const { toast } = useToast();
   const [editingCell, setEditingCell] = useState<EditableCell | null>(null);
@@ -303,11 +306,45 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
   return (
     <div className="space-y-3">
       {selectedProducts.size > 0 && (
-        <div className="flex items-center gap-3 p-2 bg-muted/50 rounded-lg border">
+        <div className="flex items-center gap-3 p-2 bg-muted/50 rounded-lg border flex-wrap">
           <span className="text-sm font-medium">{selectedProducts.size} selecionados</span>
           <Button size="sm" onClick={bulkEnrich} disabled={bulkEnriching}>
             {bulkEnriching ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Zap className="mr-2 h-3 w-3" />}
             Enriquecer em Massa
+          </Button>
+          <div className="flex items-center gap-1">
+            <FolderInput className="h-3.5 w-3.5 text-muted-foreground" />
+            <Select onValueChange={async (catalogId) => {
+              const ids = Array.from(selectedProducts);
+              const value = catalogId === "none" ? null : catalogId;
+              let moved = 0;
+              for (const id of ids) {
+                try { await updateProduct.mutateAsync({ id, catalog_id: value } as any); moved++; } catch {}
+              }
+              toast({ title: `${moved} produtos movidos!` });
+              setSelectedProducts(new Set());
+            }}>
+              <SelectTrigger className="h-7 text-xs w-36">
+                <SelectValue placeholder="Mover para..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Sem pasta</SelectItem>
+                {catalogs.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button variant="destructive" size="sm" onClick={async () => {
+            const ids = Array.from(selectedProducts);
+            let deleted = 0;
+            for (const id of ids) {
+              try { await deleteProduct.mutateAsync(id); deleted++; } catch {}
+            }
+            toast({ title: `${deleted} produtos apagados!` });
+            setSelectedProducts(new Set());
+          }}>
+            <Trash2 className="mr-2 h-3 w-3" />Apagar
           </Button>
           <Button variant="ghost" size="sm" onClick={() => setSelectedProducts(new Set())}>Limpar</Button>
         </div>

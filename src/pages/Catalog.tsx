@@ -1190,8 +1190,8 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
   };
 
   const getFileIcon = (type: string) => {
-    if (type === "pdf") return <FileUp className="h-5 w-5 text-red-500" />;
-    if (type === "excel") return <Sheet className="h-5 w-5 text-emerald-500" />;
+    if (type === "pdf") return <FileUp className="h-5 w-5 text-destructive" />;
+    if (type === "excel") return <Sheet className="h-5 w-5 text-primary" />;
     return <File className="h-5 w-5 text-muted-foreground" />;
   };
 

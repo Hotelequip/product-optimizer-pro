@@ -22,7 +22,7 @@ export interface ParsedProduct {
   _selected?: boolean;
 }
 
-type WizardStep = "parsing" | "analyzing" | "review";
+type WizardStep = "idle" | "parsing" | "analyzing" | "review";
 
 interface ImportWizardProps {
   open: boolean;
@@ -86,19 +86,15 @@ async function parseExcelFile(file: File): Promise<ParsedProduct[]> {
   const XLSX = await import("xlsx");
   const buffer = await file.arrayBuffer();
   const wb = XLSX.read(buffer, { type: "array" });
-
   const allProducts: ParsedProduct[] = [];
-
   for (const sheetName of wb.SheetNames) {
     const ws = wb.Sheets[sheetName];
     const allRows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "" });
     const headerRowIdx = detectHeaderRowIndex(allRows as unknown[][]);
     const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "", range: headerRowIdx });
-
     for (const r of jsonData) {
       const row: Record<string, string> = {};
       Object.keys(r).forEach((k) => { row[String(k).trim()] = String(r[k] ?? "").trim(); });
-
       const directName = findVal(row, ["description", "descricao", "name", "nome", "titulo", "title", "produto", "designacao"]);
       const fallbackName = Object.values(row).find((v) => {
         const value = String(v || "").trim();
@@ -106,21 +102,16 @@ async function parseExcelFile(file: File): Promise<ParsedProduct[]> {
       }) || "";
       const name = (directName || fallbackName).trim();
       if (!name) continue;
-
       allProducts.push({
-        name,
-        sku: findVal(row, ["ref", "sku", "referencia", "codigo", "code", "cod"]) || null,
-        description: null,
-        cost: parseNum(findVal(row, ["cost", "custo", "tarif", "preco custo", "net", "euro"])),
+        name, sku: findVal(row, ["ref", "sku", "referencia", "codigo", "code", "cod"]) || null,
+        description: null, cost: parseNum(findVal(row, ["cost", "custo", "tarif", "preco custo", "net", "euro"])),
         price: parseNum(findVal(row, ["price", "preco", "pvp", "sell", "venda"])),
         stock: Math.max(0, Math.trunc(parseNum(findVal(row, ["stock", "estoque", "qty", "quantidade", "std", "units"])))),
         brand: findVal(row, ["brand", "marca"]) || null,
-        supplier_url: findVal(row, ["supplier_url", "url", "fornecedor_url"]) || null,
-        _source: file.name,
+        supplier_url: findVal(row, ["supplier_url", "url", "fornecedor_url"]) || null, _source: file.name,
       });
     }
   }
-
   return allProducts;
 }
 
@@ -130,12 +121,9 @@ function parseCsvLine(line: string, delimiter: string) {
   let inQuotes = false;
   for (let i = 0; i < line.length; i++) {
     const char = line[i];
-    if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
-      else inQuotes = !inQuotes;
-    } else if (char === delimiter && !inQuotes) {
-      values.push(current.trim()); current = "";
-    } else current += char;
+    if (char === '"') { if (inQuotes && line[i + 1] === '"') { current += '"'; i++; } else inQuotes = !inQuotes; }
+    else if (char === delimiter && !inQuotes) { values.push(current.trim()); current = ""; }
+    else current += char;
   }
   values.push(current.trim());
   return values;
@@ -145,31 +133,23 @@ async function parseCsvFile(file: File): Promise<ParsedProduct[]> {
   const text = await file.text();
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (lines.length < 2) return [];
-
   const delimiter = (lines[0].match(/;/g)?.length ?? 0) > (lines[0].match(/,/g)?.length ?? 0) ? ";" : ",";
   const headers = parseCsvLine(lines[0], delimiter);
   const products: ParsedProduct[] = [];
-
   for (let i = 1; i < lines.length; i++) {
     const vals = parseCsvLine(lines[i], delimiter);
     const row: Record<string, string> = {};
     headers.forEach((h, idx) => { row[h] = vals[idx] || ""; });
-
     const name = findVal(row, ["description", "descricao", "name", "nome", "titulo", "title", "produto", "designacao"]).trim();
     if (!name) continue;
-
     products.push({
-      name,
-      sku: findVal(row, ["ref", "sku", "referencia", "codigo", "code", "cod"]) || null,
-      description: null,
-      cost: parseNum(findVal(row, ["cost", "custo", "tarif", "preco custo", "net", "euro"])),
+      name, sku: findVal(row, ["ref", "sku", "referencia", "codigo", "code", "cod"]) || null,
+      description: null, cost: parseNum(findVal(row, ["cost", "custo", "tarif", "preco custo", "net", "euro"])),
       price: parseNum(findVal(row, ["price", "preco", "pvp", "sell", "venda"])),
       stock: Math.max(0, Math.trunc(parseNum(findVal(row, ["stock", "estoque", "qty", "quantidade"])))),
-      brand: findVal(row, ["brand", "marca"]) || null,
-      _source: file.name,
+      brand: findVal(row, ["brand", "marca"]) || null, _source: file.name,
     });
   }
-
   return products;
 }
 
@@ -185,25 +165,19 @@ async function parsePdfFile(file: File): Promise<ParsedProduct[]> {
     fullText += content.items.map((item: any) => item.str).join(" ") + "\n";
   }
   if (!fullText.trim()) return [];
-
   const { data, error } = await supabase.functions.invoke("extract-products", { body: { text: fullText } });
   if (error || !data?.success) return [];
-
   return (data.products || []).map((p: any) => ({
-    name: String(p?.name || "").trim(),
-    sku: p?.sku || null,
-    description: p?.description || null,
-    cost: parseNum(p?.cost),
-    price: parseNum(p?.price),
-    stock: Math.max(0, Math.trunc(parseNum(p?.stock))),
-    brand: p?.brand || null,
-    _source: file.name,
+    name: String(p?.name || "").trim(), sku: p?.sku || null, description: p?.description || null,
+    cost: parseNum(p?.cost), price: parseNum(p?.price),
+    stock: Math.max(0, Math.trunc(parseNum(p?.stock))), brand: p?.brand || null, _source: file.name,
   })).filter((p: ParsedProduct) => p.name.length > 0);
 }
 
 export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWizardProps) {
-  const [step, setStep] = useState<WizardStep>("parsing");
+  const [step, setStep] = useState<WizardStep>("idle");
   const [parseProgress, setParseProgress] = useState(0);
+  const [statusMessage, setStatusMessage] = useState("");
   const [parsedDatasets, setParsedDatasets] = useState<{ source: string; products: ParsedProduct[] }[]>([]);
   const [mergedProducts, setMergedProducts] = useState<ParsedProduct[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -211,102 +185,84 @@ export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWi
   const [error, setError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
 
-  // Reset on open
+  // Reset and start on open
   useEffect(() => {
     if (open && files.length > 0) {
       setStep("parsing");
       setParseProgress(0);
+      setStatusMessage(`A carregar ${files.length} ficheiro(s)...`);
       setParsedDatasets([]);
       setMergedProducts([]);
       setSelectedIds(new Set());
       setSearchTerm("");
       setError(null);
       setImporting(false);
-      startParsing();
+      runPipeline();
+    } else if (!open) {
+      setStep("idle");
     }
   }, [open]);
 
-  const startParsing = async () => {
-    setStep("parsing");
-    setError(null);
+  const runPipeline = async () => {
+    // Phase 1: Parse all files
     const datasets: { source: string; products: ParsedProduct[] }[] = [];
-
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const ext = file.name.split(".").pop()?.toLowerCase();
-      setParseProgress(Math.round(((i) / files.length) * 100));
-
+      setStatusMessage(`A ler ${file.name}...`);
+      setParseProgress(Math.round((i / files.length) * 50));
       try {
         let products: ParsedProduct[] = [];
-        if (ext === "xlsx" || ext === "xls") {
-          products = await parseExcelFile(file);
-        } else if (ext === "csv") {
-          products = await parseCsvFile(file);
-        } else if (ext === "pdf") {
-          products = await parsePdfFile(file);
-        }
-        if (products.length > 0) {
-          datasets.push({ source: file.name, products });
-        }
+        if (ext === "xlsx" || ext === "xls") products = await parseExcelFile(file);
+        else if (ext === "csv") products = await parseCsvFile(file);
+        else if (ext === "pdf") products = await parsePdfFile(file);
+        if (products.length > 0) datasets.push({ source: file.name, products });
       } catch (e: any) {
         console.error(`Error parsing ${file.name}:`, e);
       }
-
-      setParseProgress(Math.round(((i + 1) / files.length) * 100));
+      setParseProgress(Math.round(((i + 1) / files.length) * 50));
     }
-
     setParsedDatasets(datasets);
 
     if (datasets.length === 0) {
-      setError("Nenhum produto encontrado nos ficheiros carregados.");
+      setError("Nenhum produto encontrado nos ficheiros.");
+      setStep("review");
       return;
     }
 
-    // Move to analysis step
-    if (datasets.length === 1) {
-      // Single file - skip merge, go directly to review
-      const products = datasets[0].products;
-      setMergedProducts(products);
-      setSelectedIds(new Set(products.map((_, i) => i)));
-      setStep("review");
-    } else {
-      // Multiple files - merge with AI
+    // Phase 2: Merge/analyze
+    if (datasets.length > 1) {
       setStep("analyzing");
+      setStatusMessage(`A cruzar dados de ${datasets.length} ficheiros...`);
+      setParseProgress(60);
       try {
         const { data, error: mergeError } = await supabase.functions.invoke("merge-products", {
           body: { datasets: datasets.map((ds) => ({ source: ds.source, products: ds.products.slice(0, 500) })) },
         });
-
         if (mergeError) throw mergeError;
-
         if (data?.success && Array.isArray(data.products)) {
           const products = data.products.map((p: any) => ({
-            name: String(p?.name || "").trim(),
-            sku: p?.sku || null,
-            description: p?.description || null,
-            cost: parseNum(p?.cost),
-            price: parseNum(p?.price),
-            stock: Math.max(0, Math.trunc(parseNum(p?.stock))),
-            brand: p?.brand || null,
-            _source: "merged",
+            name: String(p?.name || "").trim(), sku: p?.sku || null, description: p?.description || null,
+            cost: parseNum(p?.cost), price: parseNum(p?.price),
+            stock: Math.max(0, Math.trunc(parseNum(p?.stock))), brand: p?.brand || null, _source: "merged",
           })).filter((p: ParsedProduct) => p.name.length > 0);
-
           setMergedProducts(products);
           setSelectedIds(new Set(products.map((_: any, i: number) => i)));
-          setStep("review");
-        } else {
-          throw new Error("Falha na análise. A usar dados sem fusão.");
-        }
-      } catch (e: any) {
-        console.warn("Merge failed, falling back to concatenation:", e);
-        // Fallback: simple client-side dedup
+        } else throw new Error("merge failed");
+      } catch {
         const allProducts = datasets.flatMap((ds) => ds.products);
         const deduped = clientSideDedup(allProducts);
         setMergedProducts(deduped);
         setSelectedIds(new Set(deduped.map((_, i) => i)));
-        setStep("review");
       }
+    } else {
+      const products = datasets[0].products;
+      setMergedProducts(products);
+      setSelectedIds(new Set(products.map((_, i) => i)));
     }
+
+    setParseProgress(100);
+    setStep("review");
   };
 
   const clientSideDedup = (products: ParsedProduct[]): ParsedProduct[] => {
@@ -315,7 +271,6 @@ export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWi
       const key = (p.sku ?? "").toLowerCase() + "|" + p.name.toLowerCase().substring(0, 40);
       const existing = seen.get(key);
       if (existing) {
-        // Merge: take most complete data
         if (!existing.description && p.description) existing.description = p.description;
         if (!existing.cost && p.cost) existing.cost = p.cost;
         if (!existing.price && p.price) existing.price = p.price;
@@ -329,17 +284,13 @@ export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWi
   };
 
   const toggleAll = () => {
-    if (selectedIds.size === mergedProducts.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(mergedProducts.map((_, i) => i)));
-    }
+    if (selectedIds.size === mergedProducts.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(mergedProducts.map((_, i) => i)));
   };
 
   const toggleOne = (idx: number) => {
     const next = new Set(selectedIds);
-    if (next.has(idx)) next.delete(idx);
-    else next.add(idx);
+    if (next.has(idx)) next.delete(idx); else next.add(idx);
     setSelectedIds(next);
   };
 
@@ -378,138 +329,122 @@ export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWi
   };
 
   const totalFromFiles = parsedDatasets.reduce((sum, ds) => sum + ds.products.length, 0);
+  const isProcessing = step === "parsing" || step === "analyzing";
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Importação Inteligente
-          </DialogTitle>
-        </DialogHeader>
-
-        {/* Step: Parsing */}
-        {step === "parsing" && (
-          <div className="flex-1 flex flex-col items-center justify-center gap-4 py-12">
-            <Loader2 className="h-10 w-10 animate-spin text-primary" />
-            <div className="text-center">
-              <p className="text-sm font-medium">A carregar e analisar ficheiros...</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {files.map((f) => f.name).join(", ")}
-              </p>
+    <>
+      {/* Background processing banner — shown while parsing/analyzing without blocking UI */}
+      {isProcessing && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 bg-card border shadow-lg rounded-xl px-6 py-4 flex items-center gap-4 min-w-[340px] max-w-lg animate-in slide-in-from-bottom-4">
+          <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate">{statusMessage}</p>
+            <div className="flex items-center gap-2 mt-1">
+              <Progress value={parseProgress} className="h-1.5 flex-1" />
+              <span className="text-[10px] text-muted-foreground shrink-0">{parseProgress}%</span>
             </div>
-            <Progress value={parseProgress} className="w-64" />
-            {error && (
-              <div className="flex items-center gap-2 text-destructive text-sm">
-                <AlertTriangle className="h-4 w-4" />
-                {error}
-              </div>
+            {step === "analyzing" && (
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                {totalFromFiles} produtos de {parsedDatasets.length} ficheiros · A cruzar dados com IA...
+              </p>
             )}
           </div>
-        )}
+          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onClose}>
+            Cancelar
+          </Button>
+        </div>
+      )}
 
-        {/* Step: Analyzing (multi-file merge) */}
-        {step === "analyzing" && (
-          <div className="flex-1 flex flex-col items-center justify-center gap-4 py-12">
-            <Loader2 className="h-10 w-10 animate-spin text-primary" />
-            <div className="text-center">
-              <p className="text-sm font-medium">A comparar e reconciliar dados...</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {parsedDatasets.length} ficheiros · {totalFromFiles} produtos encontrados
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                A IA está a cruzar referências, eliminar duplicados e preencher dados em falta.
-              </p>
-            </div>
-          </div>
-        )}
+      {/* Review dialog — only shown when products are ready */}
+      <Dialog open={open && step === "review"} onOpenChange={(o) => { if (!o) onClose(); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col gap-3 p-0 overflow-hidden">
+          <DialogHeader className="px-6 pt-6 pb-0">
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Importação Inteligente
+            </DialogTitle>
+          </DialogHeader>
 
-        {/* Step: Review */}
-        {step === "review" && (
-          <>
-            <div className="flex items-center gap-3 flex-wrap">
-              <Badge variant="secondary" className="gap-1">
-                <CheckCircle2 className="h-3 w-3" />
-                {mergedProducts.length} produtos
-              </Badge>
-              {parsedDatasets.length > 1 && (
-                <Badge variant="outline" className="text-xs">
-                  Dados cruzados de {parsedDatasets.length} ficheiros
-                </Badge>
-              )}
+          <div className="flex items-center gap-3 flex-wrap px-6">
+            <Badge variant="secondary" className="gap-1">
+              <CheckCircle2 className="h-3 w-3" />
+              {mergedProducts.length} produtos
+            </Badge>
+            {parsedDatasets.length > 1 && (
               <Badge variant="outline" className="text-xs">
-                {selectedIds.size} selecionados
+                Dados cruzados de {parsedDatasets.length} ficheiros
               </Badge>
-              <div className="flex-1" />
-              <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                <Input
-                  placeholder="Pesquisar..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="h-8 w-48 pl-7 text-xs"
-                />
-              </div>
-            </div>
-
-            <ScrollArea className="flex-1 max-h-[50vh] border rounded-lg">
-              <table className="w-full text-xs">
-                <thead className="bg-muted/50 sticky top-0">
-                  <tr>
-                    <th className="p-2 w-8">
-                      <Checkbox checked={selectedIds.size === mergedProducts.length} onCheckedChange={toggleAll} />
-                    </th>
-                    <th className="p-2 text-left font-medium">SKU</th>
-                    <th className="p-2 text-left font-medium">Nome</th>
-                    <th className="p-2 text-right font-medium">Custo</th>
-                    <th className="p-2 text-right font-medium">Preço</th>
-                    <th className="p-2 text-right font-medium">Stock</th>
-                    <th className="p-2 text-left font-medium">Marca</th>
-                    <th className="p-2 w-8"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredProducts.map((p) => (
-                    <tr key={p._idx} className={`border-t hover:bg-muted/20 transition-colors ${selectedIds.has(p._idx) ? "" : "opacity-40"}`}>
-                      <td className="p-2">
-                        <Checkbox checked={selectedIds.has(p._idx)} onCheckedChange={() => toggleOne(p._idx)} />
-                      </td>
-                      <td className="p-2 font-mono text-muted-foreground">{p.sku || "—"}</td>
-                      <td className="p-2 max-w-[200px] truncate font-medium">{p.name}</td>
-                      <td className="p-2 text-right">{p.cost ? `€${p.cost.toFixed(2)}` : "—"}</td>
-                      <td className="p-2 text-right">{p.price ? `€${p.price.toFixed(2)}` : "—"}</td>
-                      <td className="p-2 text-right">{p.stock || "—"}</td>
-                      <td className="p-2 text-muted-foreground">{p.brand || "—"}</td>
-                      <td className="p-2">
-                        <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" onClick={() => removeProduct(p._idx)}>
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredProducts.length === 0 && (
-                    <tr>
-                      <td colSpan={8} className="p-6 text-center text-muted-foreground">
-                        {searchTerm ? "Nenhum resultado para a pesquisa." : "Nenhum produto para importar."}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </ScrollArea>
-
-            {error && (
-              <div className="flex items-center gap-2 text-destructive text-sm">
-                <AlertTriangle className="h-4 w-4" />
-                {error}
-              </div>
             )}
-          </>
-        )}
+            <Badge variant="outline" className="text-xs">
+              {selectedIds.size} selecionados
+            </Badge>
+            <div className="flex-1" />
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Pesquisar..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="h-8 w-48 pl-7 text-xs"
+              />
+            </div>
+          </div>
 
-        {step === "review" && (
-          <DialogFooter>
+          {/* Scrollable table — using native overflow */}
+          <div className="flex-1 overflow-auto min-h-0 border-t border-b" style={{ maxHeight: "calc(90vh - 200px)" }}>
+            <table className="w-full text-xs">
+              <thead className="bg-muted/50 sticky top-0 z-10">
+                <tr>
+                  <th className="p-2 w-8">
+                    <Checkbox checked={selectedIds.size === mergedProducts.length && mergedProducts.length > 0} onCheckedChange={toggleAll} />
+                  </th>
+                  <th className="p-2 text-left font-medium">SKU</th>
+                  <th className="p-2 text-left font-medium">Nome</th>
+                  <th className="p-2 text-right font-medium">Custo</th>
+                  <th className="p-2 text-right font-medium">Preço</th>
+                  <th className="p-2 text-right font-medium">Stock</th>
+                  <th className="p-2 text-left font-medium">Marca</th>
+                  <th className="p-2 w-8"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProducts.map((p) => (
+                  <tr key={p._idx} className={`border-t hover:bg-muted/20 transition-colors ${selectedIds.has(p._idx) ? "" : "opacity-40"}`}>
+                    <td className="p-2">
+                      <Checkbox checked={selectedIds.has(p._idx)} onCheckedChange={() => toggleOne(p._idx)} />
+                    </td>
+                    <td className="p-2 font-mono text-muted-foreground">{p.sku || "—"}</td>
+                    <td className="p-2 max-w-[200px] truncate font-medium">{p.name}</td>
+                    <td className="p-2 text-right">{p.cost ? `€${p.cost.toFixed(2)}` : "—"}</td>
+                    <td className="p-2 text-right">{p.price ? `€${p.price.toFixed(2)}` : "—"}</td>
+                    <td className="p-2 text-right">{p.stock || "—"}</td>
+                    <td className="p-2 text-muted-foreground">{p.brand || "—"}</td>
+                    <td className="p-2">
+                      <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" onClick={() => removeProduct(p._idx)}>
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+                {filteredProducts.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="p-6 text-center text-muted-foreground">
+                      {searchTerm ? "Nenhum resultado para a pesquisa." : "Nenhum produto para importar."}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {error && (
+            <div className="flex items-center gap-2 text-destructive text-sm px-6">
+              <AlertTriangle className="h-4 w-4" />
+              {error}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 px-6 pb-6">
             <Button variant="outline" onClick={onClose} disabled={importing}>
               Cancelar
             </Button>
@@ -523,9 +458,9 @@ export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWi
                 `Importar ${selectedIds.size} produtos`
               )}
             </Button>
-          </DialogFooter>
-        )}
-      </DialogContent>
-    </Dialog>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

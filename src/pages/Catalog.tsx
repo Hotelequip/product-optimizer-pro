@@ -440,6 +440,58 @@ export default function Catalog() {
     setWizardOpen(true);
   };
 
+  // Background: fetch images for products missing image_url
+  const fetchMissingImages = async () => {
+    if (!user) return;
+    try {
+      const { data: noImageProducts } = await supabase
+        .from("products")
+        .select("id, name, sku, supplier_url")
+        .eq("user_id", user.id)
+        .is("image_url", null)
+        .limit(30);
+
+      if (!noImageProducts || noImageProducts.length === 0) return;
+
+      toast({
+        title: `A procurar imagens para ${noImageProducts.length} produto(s)...`,
+        description: "Isto acontece em segundo plano.",
+      });
+
+      const { data, error } = await supabase.functions.invoke("web-scrape-product", {
+        body: { action: "fetch_images", products: noImageProducts },
+      });
+
+      if (error || !data?.success) {
+        console.warn("Image fetch failed:", error || data?.error);
+        return;
+      }
+
+      const results = data.results || [];
+      let foundCount = 0;
+
+      for (const r of results) {
+        if (r.success && r.image_url) {
+          await supabase
+            .from("products")
+            .update({ image_url: r.image_url })
+            .eq("id", r.product_id);
+          foundCount++;
+        }
+      }
+
+      if (foundCount > 0) {
+        queryClient.invalidateQueries({ queryKey: ["products"] });
+        toast({
+          title: `${foundCount} imagem(ns) encontrada(s)`,
+          description: "Imagens de produtos atualizadas automaticamente.",
+        });
+      }
+    } catch (e) {
+      console.warn("Background image fetch error:", e);
+    }
+  };
+
   const handleWizardConfirm = async (products: ParsedProduct[], files: File[]) => {
     if (!user) throw new Error("Sessão expirada.");
 

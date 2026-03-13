@@ -973,16 +973,25 @@ export default function Catalog() {
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-muted-foreground">
-                  {fetchProgress.found > 0 ? `${fetchProgress.found} encontrado(s)` : "A procurar..."}
+                  {cancelRequested
+                    ? "A cancelar..."
+                    : fetchProgress.found > 0
+                    ? `${fetchProgress.found} encontrado(s)`
+                    : "A procurar..."}
                 </span>
                 <Button
                   variant="ghost"
                   size="sm"
+                  disabled={cancelRequested}
                   className="h-7 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
-                  onClick={() => { cancelRef.current = true; }}
+                  onClick={() => {
+                    cancelRef.current = true;
+                    setCancelRequested(true);
+                    setFetchProgress(prev => (prev ? { ...prev, currentName: "A cancelar..." } : prev));
+                  }}
                 >
                   <X className="h-3.5 w-3.5 mr-1" />
-                  Cancelar
+                  {cancelRequested ? "A cancelar" : "Cancelar"}
                 </Button>
               </div>
             </div>

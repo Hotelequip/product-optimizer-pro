@@ -245,6 +245,21 @@ export default function Catalog() {
             imported++;
           } catch {}
         }
+        // Save PDF to catalog_files
+        try {
+          const fileName = `${Date.now()}-${file.name}`;
+          const { error: uploadErr } = await supabase.storage.from("catalog-files").upload(fileName, file, { upsert: true });
+          if (!uploadErr) {
+            const { data: urlData } = supabase.storage.from("catalog-files").getPublicUrl(fileName);
+            await addCatalogFile.mutateAsync({
+              catalog_id: catalogId,
+              file_name: file.name,
+              file_url: urlData.publicUrl,
+              file_type: "pdf",
+              file_size: file.size,
+            });
+          }
+        } catch {}
         toast({ title: `${imported} produtos importados do PDF!` });
       } else {
         toast({ title: "Nenhum produto encontrado no PDF", variant: "destructive" });

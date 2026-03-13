@@ -423,11 +423,15 @@ export default function Catalog() {
               {isLoading ? (
                 <p className="text-muted-foreground text-sm">Carregando...</p>
               ) : filteredProducts.length === 0 ? (
-                <p className="text-muted-foreground text-sm text-center py-8">
-                  {products.length === 0
-                    ? "Nenhum produto encontrado. Importe um ficheiro Excel ou PDF."
-                    : "Nenhum produto nesta pasta."}
-                </p>
+                <div className="text-center py-12 space-y-3">
+                  <Upload className="h-10 w-10 mx-auto text-muted-foreground" />
+                  <p className="text-muted-foreground text-sm">
+                    {products.length === 0
+                      ? "Arraste um ficheiro Excel, CSV ou PDF para importar produtos"
+                      : "Nenhum produto nesta pasta."}
+                  </p>
+                  <p className="text-xs text-muted-foreground">ou use os botões acima</p>
+                </div>
               ) : (
                 <SpreadsheetEditor products={filteredProducts} />
               )}

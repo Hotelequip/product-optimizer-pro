@@ -1351,3 +1351,204 @@ function InlineProductForm({
     </form>
   );
 }
+
+function ImageGalleryTab({ products }: { products: Product[] }) {
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [generatingAi, setGeneratingAi] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const withImage = products.filter(p => p.image_url);
+  const withoutImage = products.filter(p => !p.image_url);
+
+  const handleGenerateAiImage = async (product: Product) => {
+    if (generatingAi) return;
+    setGeneratingAi(true);
+    try {
+      const prompt = `Professional product photo of "${product.name}"${product.description ? `. ${product.description.substring(0, 200)}` : ""}. Clean white background, studio lighting, e-commerce product photography, high quality, sharp details.`;
+
+      const { data, error } = await supabase.functions.invoke("ai-enrich", {
+        body: {
+          action: "generate_image",
+          product_id: product.id,
+          prompt,
+        },
+      });
+
+      if (error || !data?.success) {
+        toast({ title: "Erro ao gerar imagem", description: data?.error || "Tente novamente.", variant: "destructive" });
+        return;
+      }
+
+      if (data.image_url) {
+        await supabase.from("products").update({ image_url: data.image_url } as any).eq("id", product.id);
+        queryClient.invalidateQueries({ queryKey: ["products"] });
+        toast({ title: "Imagem gerada com sucesso!" });
+        setSelectedProduct({ ...product, image_url: data.image_url });
+      }
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } finally {
+      setGeneratingAi(false);
+    }
+  };
+
+  const handleOptimizeImage = async (product: Product) => {
+    if (!product.image_url || optimizing) return;
+    setOptimizing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("ai-enrich", {
+        body: {
+          action: "optimize_image",
+          product_id: product.id,
+          image_url: product.image_url,
+          product_name: product.name,
+        },
+      });
+
+      if (error || !data?.success) {
+        toast({ title: "Erro ao otimizar", description: data?.error || "Tente novamente.", variant: "destructive" });
+        return;
+      }
+
+      if (data.optimized_url) {
+        await supabase.from("products").update({ image_url: data.optimized_url } as any).eq("id", product.id);
+        queryClient.invalidateQueries({ queryKey: ["products"] });
+        toast({ title: "Imagem otimizada!" });
+        setSelectedProduct({ ...product, image_url: data.optimized_url });
+      }
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } finally {
+      setOptimizing(false);
+    }
+  };
+
+  const handleGenerateLifestyle = async (product: Product) => {
+    if (!product.image_url || generatingAi) return;
+    setGeneratingAi(true);
+    try {
+      const prompt = `Take this product "${product.name}" and place it in a realistic lifestyle environment. Professional product photography in a natural setting, warm lighting, lifestyle context, editorial style.`;
+
+      const { data, error } = await supabase.functions.invoke("ai-enrich", {
+        body: {
+          action: "generate_lifestyle",
+          product_id: product.id,
+          image_url: product.image_url,
+          prompt,
+        },
+      });
+
+      if (error || !data?.success) {
+        toast({ title: "Erro ao gerar", description: data?.error || "Tente novamente.", variant: "destructive" });
+        return;
+      }
+
+      if (data.image_url) {
+        queryClient.invalidateQueries({ queryKey: ["product_images"] });
+        toast({ title: "Imagem lifestyle gerada!" });
+      }
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } finally {
+      setGeneratingAi(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-muted-foreground">{withImage.length} com imagem · {withoutImage.length} sem imagem</p>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        {products.map(product => (
+          <div
+            key={product.id}
+            className="border rounded-lg p-3 text-center space-y-2 hover:shadow-md transition-shadow cursor-pointer group relative"
+            onClick={() => setSelectedProduct(product)}
+          >
+            {product.image_url ? (
+              <div className="relative">
+                <img src={product.image_url} alt={product.name} className="w-full h-28 object-contain rounded" />
+                <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/10 rounded transition-colors flex items-center justify-center">
+                  <ZoomIn className="h-6 w-6 text-background opacity-0 group-hover:opacity-80 transition-opacity" />
+                </div>
+              </div>
+            ) : (
+              <div className="w-full h-28 bg-muted rounded flex flex-col items-center justify-center text-muted-foreground">
+                <ImageIcon className="h-8 w-8 mb-1" />
+                <span className="text-xs">Sem imagem</span>
+              </div>
+            )}
+            <p className="text-xs font-medium truncate">{product.name}</p>
+            {product.sku && <p className="text-[10px] text-muted-foreground">{product.sku}</p>}
+          </div>
+        ))}
+      </div>
+
+      {/* Lightbox / Product Image Dialog */}
+      <Dialog open={!!selectedProduct} onOpenChange={(open) => { if (!open) setSelectedProduct(null); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="truncate pr-8">{selectedProduct?.name}</DialogTitle>
+          </DialogHeader>
+          {selectedProduct && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-center bg-muted/30 rounded-lg p-4 min-h-[300px]">
+                {selectedProduct.image_url ? (
+                  <img
+                    src={selectedProduct.image_url}
+                    alt={selectedProduct.name}
+                    className="max-w-full max-h-[400px] object-contain rounded"
+                  />
+                ) : (
+                  <div className="text-center text-muted-foreground space-y-2">
+                    <ImageIcon className="h-16 w-16 mx-auto" />
+                    <p>Este produto não tem imagem</p>
+                  </div>
+                )}
+              </div>
+
+              {selectedProduct.sku && (
+                <p className="text-sm text-muted-foreground">SKU: {selectedProduct.sku}</p>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  disabled={generatingAi}
+                  onClick={() => handleGenerateAiImage(selectedProduct)}
+                >
+                  {generatingAi ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                  Gerar com IA
+                </Button>
+
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  disabled={!selectedProduct.image_url || optimizing}
+                  onClick={() => handleOptimizeImage(selectedProduct)}
+                >
+                  {optimizing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                  Otimizar
+                </Button>
+
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  disabled={!selectedProduct.image_url || generatingAi}
+                  onClick={() => handleGenerateLifestyle(selectedProduct)}
+                >
+                  {generatingAi ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}
+                  Ambiente Real
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}

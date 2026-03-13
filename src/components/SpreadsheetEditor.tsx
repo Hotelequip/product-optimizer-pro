@@ -139,7 +139,12 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
         toast({ title: "Erro ao enriquecer", description: data.error, variant: "destructive" });
       }
     } catch (e: any) {
-      toast({ title: "Erro", description: e.message, variant: "destructive" });
+      const msg = e.message || "";
+      if (msg.includes("402") || msg.includes("créditos") || msg.includes("insuficientes")) {
+        toast({ title: "Créditos insuficientes", description: "Adiciona créditos em Settings → Workspace → Usage para usar a IA.", variant: "destructive" });
+      } else {
+        toast({ title: "Erro", description: msg, variant: "destructive" });
+      }
     }
     setEnrichingId(null);
   };

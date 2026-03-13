@@ -451,6 +451,7 @@ export function ImportWizard({ open, onClose, files, onConfirmImport }: ImportWi
                     <td className="p-2">
                       <Checkbox checked={selectedIds.has(p._idx)} onCheckedChange={() => toggleOne(p._idx)} />
                     </td>
+                    <td className="p-2 font-mono text-muted-foreground">{p.sku || "—"}</td>
                     <td className="p-2 max-w-[200px] font-medium">
                       <div className="flex items-center gap-1.5">
                         <span className="truncate">{p.name}</span>

@@ -100,6 +100,32 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
     setGeneratingImageId(null);
   };
 
+  const scrapeProduct = async (product: Product) => {
+    setScrapingId(product.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("web-scrape-product", {
+        body: { product_name: product.name },
+      });
+      if (error) throw error;
+      if (data.success && data.enriched) {
+        const updates: any = { id: product.id };
+        if (data.enriched.description) updates.description = data.enriched.description;
+        await updateProduct.mutateAsync(updates);
+        toast({
+          title: "Dados encontrados na web!",
+          description: data.enriched.specifications
+            ? `${data.enriched.specifications.length} especificações encontradas`
+            : "Descrição atualizada",
+        });
+      } else {
+        toast({ title: "Nenhum dado encontrado na web", variant: "destructive" });
+      }
+    } catch (e: any) {
+      toast({ title: "Erro no web scraping", description: e.message, variant: "destructive" });
+    }
+    setScrapingId(null);
+  };
+
   const isEditing = (productId: string, field: string) =>
     editingCell?.productId === productId && editingCell?.field === field;
 

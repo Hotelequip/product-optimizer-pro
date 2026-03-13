@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
-import { Wand2, Image as ImageIcon, Loader2, Globe, Zap, Pencil, Settings, Check, ExternalLink, Filter, X, FolderInput, Trash2 } from "lucide-react";
+import { Wand2, Image as ImageIcon, Loader2, Globe, Zap, Pencil, Settings, Check, ExternalLink, Filter, X, FolderInput, Trash2, FileSpreadsheet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -120,7 +120,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
       });
       if (error) throw error;
       if (data.success && data.enriched) {
-        const slug = slugify(data.enriched.seo_title || data.enriched.optimized_title || product.name);
+        const slug = slugify(data.enriched.slug || data.enriched.seo_title || data.enriched.optimized_title || product.name);
         await updateProduct.mutateAsync({
           id: product.id,
           description: data.enriched.description || product.description,
@@ -130,6 +130,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
           seo_title: data.enriched.seo_title || null,
           tags: data.enriched.tags || null,
           slug,
+          product_type: data.enriched.product_type || product.product_type || "simple",
           enrichment_phase: Math.min((product.enrichment_phase || 0) + 1, 3),
           last_enriched_at: new Date().toISOString(),
         });
@@ -245,6 +246,57 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
     setSelectedProducts(next);
   };
 
+  // WooCommerce Excel Export
+  const exportWooCommerceExcel = async () => {
+    const XLSX = await import("xlsx");
+    const productsToExport = selectedProducts.size > 0
+      ? products.filter(p => selectedProducts.has(p.id))
+      : products;
+
+    const stripHtml = (html: string | null) => {
+      if (!html) return "";
+      return html.replace(/<[^>]*>/g, "").trim();
+    };
+
+    const wooRows = productsToExport.map(p => {
+      const catName = categories.find(c => c.id === p.category_id)?.name || "";
+      return {
+        "Type": p.product_type || "simple",
+        "SKU": p.sku || "",
+        "Name": p.optimized_title || p.name,
+        "Published": p.status === "active" ? 1 : 0,
+        "Is featured?": 0,
+        "Visibility in catalog": "visible",
+        "Short description": p.short_description || "",
+        "Description": p.description || "",
+        "Tax status": "taxable",
+        "In stock?": p.stock > 0 ? 1 : 0,
+        "Stock": p.stock,
+        "Regular price": p.price || "",
+        "Categories": catName,
+        "Tags": (p.tags || []).join(", "),
+        "Images": p.image_url || "",
+        "Meta: _yoast_wpseo_title": p.seo_title || p.optimized_title || "",
+        "Meta: _yoast_wpseo_metadesc": p.meta_description || "",
+        "Meta: _yoast_wpseo_focuskw": stripHtml(p.optimized_title),
+        "Slug": p.slug || "",
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(wooRows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Products");
+
+    // Auto-size columns
+    const colWidths = Object.keys(wooRows[0] || {}).map(key => ({
+      wch: Math.max(key.length, ...wooRows.map(r => String((r as any)[key] || "").substring(0, 50).length)) + 2,
+    }));
+    ws["!cols"] = colWidths;
+
+    XLSX.writeFile(wb, `woocommerce-import-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    toast({ title: `${wooRows.length} produtos exportados para Excel WooCommerce!` });
+  };
+
   const renderCell = (product: Product, field: keyof Product, maxW?: string) => {
     if (isEditing(product.id, field)) {
       return (
@@ -309,6 +361,14 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
 
   return (
     <div className="space-y-3">
+      {/* Export button - always visible */}
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={exportWooCommerceExcel} className="gap-1.5">
+          <FileSpreadsheet className="h-3.5 w-3.5" />
+          Exportar Excel WooCommerce
+          {selectedProducts.size > 0 && ` (${selectedProducts.size})`}
+        </Button>
+      </div>
       {selectedProducts.size > 0 && (
         <div className="space-y-2">
           <div className="flex items-center gap-3 p-2 bg-muted/50 rounded-lg border flex-wrap">
@@ -478,6 +538,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-32">Categoria</th>
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground min-w-[120px]">Desc. Curta</th>
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-28">Slug</th>
+              <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-16">Tipo</th>
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-36">Estado</th>
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-20">Fases</th>
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-12">SEO</th>
@@ -494,6 +555,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
               <td className="p-1"><Filter className="h-3 w-3 text-muted-foreground mx-auto" /></td>
               <td className="p-1"><Input placeholder="SKU..." value={columnFilters.sku || ""} onChange={e => setFilter("sku", e.target.value)} className="h-6 text-[10px] px-1" /></td>
               <td className="p-1"><Input placeholder="Título..." value={columnFilters.name || ""} onChange={e => setFilter("name", e.target.value)} className="h-6 text-[10px] px-1" /></td>
+              <td className="p-1"></td>
               <td className="p-1"></td>
               <td className="p-1"></td>
               <td className="p-1"></td>
@@ -528,6 +590,11 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
                 </td>
                 <td className="p-2">{renderCell(product, "short_description", "max-w-[150px]")}</td>
                 <td className="p-2">{renderCell(product, "slug", "max-w-[120px]")}</td>
+                <td className="p-2">
+                  <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${product.product_type === "variable" ? "border-purple-500/40 text-purple-400" : "border-muted-foreground/30 text-muted-foreground"}`}>
+                    {product.product_type === "variable" ? "Variável" : "Simples"}
+                  </Badge>
+                </td>
                 <td className="p-2">{getStatusBadge(product)}</td>
                 <td className="p-2">{getPhaseButtons(product)}</td>
                 <td className="p-2">{getSeoScore(product)}</td>

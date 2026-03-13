@@ -236,6 +236,7 @@ export type Database = {
           name: string
           optimized_title: string | null
           price: number
+          product_type: string
           seo_score: number | null
           seo_title: string | null
           short_description: string | null
@@ -264,6 +265,7 @@ export type Database = {
           name: string
           optimized_title?: string | null
           price?: number
+          product_type?: string
           seo_score?: number | null
           seo_title?: string | null
           short_description?: string | null
@@ -292,6 +294,7 @@ export type Database = {
           name?: string
           optimized_title?: string | null
           price?: number
+          product_type?: string
           seo_score?: number | null
           seo_title?: string | null
           short_description?: string | null

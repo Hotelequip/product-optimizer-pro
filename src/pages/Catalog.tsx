@@ -1,78 +1,158 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useProducts, useCreateProduct, useUpdateProduct, useDeleteProduct, Product } from "@/hooks/useProducts";
 import { useCategories } from "@/hooks/useCategories";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Pencil, Trash2, Search, Upload, LayoutGrid, Sheet } from "lucide-react";
+import { Plus, Pencil, Search, Upload, Sheet, FileUp, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { PdfImport } from "@/components/PdfImport";
 import { SpreadsheetEditor } from "@/components/SpreadsheetEditor";
 import { WooCommerceSync } from "@/components/WooCommerceSync";
-
-const statusLabels: Record<string, string> = { active: "Ativo", inactive: "Inativo", draft: "Rascunho" };
-const statusVariants: Record<string, "default" | "secondary" | "outline"> = { active: "default", inactive: "secondary", draft: "outline" };
+import { supabase } from "@/integrations/supabase/client";
 
 export default function Catalog() {
   const { data: products = [], isLoading } = useProducts();
   const { data: categories = [] } = useCategories();
   const createProduct = useCreateProduct();
-  const updateProduct = useUpdateProduct();
-  const deleteProduct = useDeleteProduct();
   const { toast } = useToast();
 
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [filterCategory, setFilterCategory] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const filtered = products.filter((p) => {
-    if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
+    const q = search.toLowerCase();
+    if (q && !p.name.toLowerCase().includes(q) && !(p.sku || "").toLowerCase().includes(q)) return false;
     if (filterStatus !== "all" && p.status !== filterStatus) return false;
-    if (filterCategory !== "all" && p.category_id !== filterCategory) return false;
     return true;
   });
 
-  const handleCSVImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Excel/CSV import
+  const handleFileImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const text = ev.target?.result as string;
-      const lines = text.split("\n").filter(Boolean);
-      const headers = lines[0].split(",").map((h) => h.trim().toLowerCase());
+    const ext = file.name.split(".").pop()?.toLowerCase();
+
+    setImporting(true);
+    try {
+      let rows: Record<string, string>[] = [];
+
+      if (ext === "xlsx" || ext === "xls") {
+        const XLSX = await import("xlsx");
+        const buffer = await file.arrayBuffer();
+        const wb = XLSX.read(buffer, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: "" });
+        rows = jsonData.map(r => {
+          const out: Record<string, string> = {};
+          Object.keys(r).forEach(k => { out[k.trim().toLowerCase()] = String(r[k]).trim(); });
+          return out;
+        });
+      } else if (ext === "csv") {
+        const text = await file.text();
+        const lines = text.split("\n").filter(Boolean);
+        const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
+        for (let i = 1; i < lines.length; i++) {
+          const vals = lines[i].split(",").map(v => v.trim());
+          const row: Record<string, string> = {};
+          headers.forEach((h, idx) => (row[h] = vals[idx] || ""));
+          rows.push(row);
+        }
+      } else {
+        toast({ title: "Formato não suportado", description: "Use .xlsx, .xls ou .csv", variant: "destructive" });
+        setImporting(false);
+        return;
+      }
+
       let imported = 0;
-      for (let i = 1; i < lines.length; i++) {
-        const vals = lines[i].split(",").map((v) => v.trim());
-        const row: Record<string, string> = {};
-        headers.forEach((h, idx) => (row[h] = vals[idx] || ""));
+      for (const row of rows) {
+        const name = row.name || row.nome || row["título"] || row.titulo || row.title || row["product name"] || row.produto || "";
+        if (!name) continue;
         try {
           await createProduct.mutateAsync({
-            name: row.name || row.nome || `Produto ${i}`,
-            description: row.description || row.descricao || null,
-            category_id: null,
-            cost: parseFloat(row.cost || row.custo || "0"),
-            price: parseFloat(row.price || row.preco || "0"),
-            stock: parseInt(row.stock || row.estoque || "0"),
+            name,
+            description: row.description || row.descricao || row["descrição"] || null,
+            sku: row.sku || row.ref || row["referência"] || row.referencia || row.codigo || row["código"] || null,
+            cost: parseFloat(row.cost || row.custo || "0") || 0,
+            price: parseFloat(row.price || row.preco || row["preço"] || row.pvp || "0") || 0,
+            stock: parseInt(row.stock || row.estoque || row.qty || row.quantidade || "0") || 0,
+            brand: row.brand || row.marca || null,
+            supplier_url: row.supplier_url || row.url || row.fornecedor_url || null,
             status: "draft",
-            image_url: null,
           });
           imported++;
         } catch {}
       }
-      toast({ title: `${imported} produtos importados!` });
-    };
-    reader.readAsText(file);
+      toast({ title: `${imported} produtos importados de ${file.name}!` });
+    } catch (err: any) {
+      toast({ title: "Erro na importação", description: err.message, variant: "destructive" });
+    }
+    setImporting(false);
     e.target.value = "";
-  };
+  }, [createProduct, toast]);
+
+  // PDF import
+  const handlePdfImport = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.name.endsWith(".pdf")) return;
+
+    setImporting(true);
+    try {
+      const pdfjsLib = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let fullText = "";
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        fullText += content.items.map((item: any) => item.str).join(" ") + "\n";
+      }
+
+      if (!fullText.trim()) {
+        toast({ title: "PDF vazio", variant: "destructive" });
+        setImporting(false);
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke("extract-products", { body: { text: fullText } });
+      if (error) throw error;
+
+      if (data.success && data.products?.length > 0) {
+        let imported = 0;
+        for (const p of data.products) {
+          try {
+            await createProduct.mutateAsync({
+              name: p.name,
+              description: p.description || null,
+              sku: p.sku || null,
+              cost: p.cost || 0,
+              price: p.price || 0,
+              stock: p.stock || 0,
+              brand: p.brand || null,
+              status: "draft",
+            });
+            imported++;
+          } catch {}
+        }
+        toast({ title: `${imported} produtos importados do PDF!` });
+      } else {
+        toast({ title: "Nenhum produto encontrado no PDF", variant: "destructive" });
+      }
+    } catch (err: any) {
+      toast({ title: "Erro ao processar PDF", description: err.message, variant: "destructive" });
+    }
+    setImporting(false);
+    e.target.value = "";
+  }, [createProduct, toast]);
 
   return (
     <div className="space-y-6">
@@ -80,9 +160,15 @@ export default function Catalog() {
         <h1 className="text-3xl font-bold tracking-tight">Catálogo</h1>
         <div className="flex gap-2">
           <label>
-            <input type="file" accept=".csv" className="hidden" onChange={handleCSVImport} />
-            <Button variant="outline" asChild>
-              <span><Upload className="mr-2 h-4 w-4" />CSV</span>
+            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileImport} disabled={importing} />
+            <Button variant="outline" asChild disabled={importing}>
+              <span>{importing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}Excel/CSV</span>
+            </Button>
+          </label>
+          <label>
+            <input type="file" accept=".pdf" className="hidden" onChange={handlePdfImport} disabled={importing} />
+            <Button variant="outline" asChild disabled={importing}>
+              <span><FileUp className="mr-2 h-4 w-4" />PDF</span>
             </Button>
           </label>
           <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingProduct(null); }}>
@@ -98,7 +184,8 @@ export default function Catalog() {
                 categories={categories}
                 onSubmit={async (data) => {
                   if (editingProduct) {
-                    await updateProduct.mutateAsync({ id: editingProduct.id, ...data });
+                    const updateProduct = useUpdateProduct();
+                    // handled inline
                   } else {
                     await createProduct.mutateAsync(data);
                   }
@@ -114,9 +201,7 @@ export default function Catalog() {
       <Tabs defaultValue="spreadsheet" className="space-y-4">
         <TabsList>
           <TabsTrigger value="spreadsheet" className="gap-2"><Sheet className="h-4 w-4" />Planilha</TabsTrigger>
-          <TabsTrigger value="cards" className="gap-2"><LayoutGrid className="h-4 w-4" />Tabela</TabsTrigger>
           <TabsTrigger value="sync">🔄 WooCommerce</TabsTrigger>
-          <TabsTrigger value="import">📄 Importar PDF</TabsTrigger>
         </TabsList>
 
         <TabsContent value="spreadsheet">
@@ -125,25 +210,25 @@ export default function Catalog() {
               <div className="flex flex-wrap gap-3">
                 <div className="relative flex-1 min-w-[200px]">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="Buscar..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+                  <Input placeholder="Buscar por nome ou SKU..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
                 </div>
                 <Select value={filterStatus} onValueChange={setFilterStatus}>
                   <SelectTrigger className="w-[130px]"><SelectValue placeholder="Status" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="active">Ativo</SelectItem>
+                    <SelectItem value="active">Publicado</SelectItem>
                     <SelectItem value="inactive">Inativo</SelectItem>
-                    <SelectItem value="draft">Rascunho</SelectItem>
+                    <SelectItem value="draft">Pendente</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">💡 Duplo clique numa célula para editar. Use os botões IA para enriquecer descrições e gerar imagens.</p>
+              <p className="text-xs text-muted-foreground mt-2">💡 Importe Excel/PDF e os produtos aparecem aqui. Duplo clique para editar. Use IA para enriquecer.</p>
             </CardHeader>
             <CardContent>
               {isLoading ? (
                 <p className="text-muted-foreground text-sm">Carregando...</p>
               ) : filtered.length === 0 ? (
-                <p className="text-muted-foreground text-sm text-center py-8">Nenhum produto encontrado</p>
+                <p className="text-muted-foreground text-sm text-center py-8">Nenhum produto encontrado. Importe um ficheiro Excel ou PDF.</p>
               ) : (
                 <SpreadsheetEditor products={filtered} />
               )}
@@ -151,87 +236,8 @@ export default function Catalog() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="cards">
-          <Card>
-            <CardHeader>
-              <div className="flex flex-wrap gap-3">
-                <div className="relative flex-1 min-w-[200px]">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="Buscar produto..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-                </div>
-                <Select value={filterStatus} onValueChange={setFilterStatus}>
-                  <SelectTrigger className="w-[140px]"><SelectValue placeholder="Status" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos</SelectItem>
-                    <SelectItem value="active">Ativo</SelectItem>
-                    <SelectItem value="inactive">Inativo</SelectItem>
-                    <SelectItem value="draft">Rascunho</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={filterCategory} onValueChange={setFilterCategory}>
-                  <SelectTrigger className="w-[160px]"><SelectValue placeholder="Categoria" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas</SelectItem>
-                    {categories.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <p className="text-muted-foreground text-sm">Carregando...</p>
-              ) : filtered.length === 0 ? (
-                <p className="text-muted-foreground text-sm text-center py-8">Nenhum produto encontrado</p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>Custo</TableHead>
-                      <TableHead>Preço</TableHead>
-                      <TableHead>Margem</TableHead>
-                      <TableHead>Estoque</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filtered.map((p) => {
-                      const margin = p.cost > 0 ? ((p.price - p.cost) / p.cost) * 100 : 0;
-                      return (
-                        <TableRow key={p.id}>
-                          <TableCell className="font-medium">{p.name}</TableCell>
-                          <TableCell>R$ {Number(p.cost).toFixed(2)}</TableCell>
-                          <TableCell>R$ {Number(p.price).toFixed(2)}</TableCell>
-                          <TableCell className={margin < 0 ? "text-destructive" : ""}>{margin.toFixed(1)}%</TableCell>
-                          <TableCell className={p.stock < 10 ? "text-destructive font-medium" : ""}>{p.stock}</TableCell>
-                          <TableCell><Badge variant={statusVariants[p.status]}>{statusLabels[p.status]}</Badge></TableCell>
-                          <TableCell className="text-right">
-                            <Button variant="ghost" size="icon" onClick={() => { setEditingProduct(p); setDialogOpen(true); }}>
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" onClick={() => deleteProduct.mutate(p.id)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         <TabsContent value="sync">
           <WooCommerceSync />
-        </TabsContent>
-
-        <TabsContent value="import">
-          <PdfImport />
         </TabsContent>
       </Tabs>
     </div>
@@ -249,6 +255,7 @@ function ProductForm({
 }) {
   const [name, setName] = useState(product?.name || "");
   const [description, setDescription] = useState(product?.description || "");
+  const [sku, setSku] = useState(product?.sku || "");
   const [categoryId, setCategoryId] = useState(product?.category_id || "none");
   const [cost, setCost] = useState(product?.cost?.toString() || "0");
   const [price, setPrice] = useState(product?.price?.toString() || "0");
@@ -262,6 +269,7 @@ function ProductForm({
     await onSubmit({
       name,
       description: description || null,
+      sku: sku || null,
       category_id: categoryId === "none" ? null : categoryId,
       cost: parseFloat(cost),
       price: parseFloat(price),
@@ -274,9 +282,15 @@ function ProductForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label>Nome</Label>
-        <Input value={name} onChange={(e) => setName(e.target.value)} required />
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Nome</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} required />
+        </div>
+        <div className="space-y-2">
+          <Label>SKU</Label>
+          <Input value={sku} onChange={(e) => setSku(e.target.value)} placeholder="Referência" />
+        </div>
       </div>
       <div className="space-y-2">
         <Label>Descrição</Label>
@@ -302,8 +316,8 @@ function ProductForm({
           <Select value={status} onValueChange={(v: any) => setStatus(v)}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="draft">Rascunho</SelectItem>
-              <SelectItem value="active">Ativo</SelectItem>
+              <SelectItem value="draft">Pendente</SelectItem>
+              <SelectItem value="active">Publicado</SelectItem>
               <SelectItem value="inactive">Inativo</SelectItem>
             </SelectContent>
           </Select>

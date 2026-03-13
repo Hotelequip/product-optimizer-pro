@@ -121,6 +121,82 @@ Return a JSON object with:
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    if (action === 'optimize_image') {
+      const { image_url, product_name } = product;
+      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-3.1-flash-image-preview',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: `Enhance this product image for e-commerce: improve lighting, contrast, sharpness, and color balance. Keep the product centered on a clean white background. Product: ${product_name}` },
+                { type: 'image_url', image_url: { url: image_url } }
+              ]
+            }
+          ],
+          modalities: ['image', 'text'],
+        }),
+      });
+
+      if (!response.ok) {
+        if (response.status === 429) return new Response(JSON.stringify({ success: false, error: 'Limite de requisições excedido' }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        if (response.status === 402) return new Response(JSON.stringify({ success: false, error: 'Créditos insuficientes' }), { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ success: false, error: `Image optimization failed: ${response.status}` }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const data = await response.json();
+      const optimizedUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+      if (!optimizedUrl) return new Response(JSON.stringify({ success: false, error: 'Nenhuma imagem otimizada gerada' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      return new Response(JSON.stringify({ success: true, image_url: optimizedUrl }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (action === 'generate_scene') {
+      const { image_url, product_name, description } = product;
+      const scenePrompt = `Place this product (${product_name}) in a realistic, professional setting. ${description || ''} Create a lifestyle product photo showing the product being used in its natural environment with realistic lighting and surroundings. High quality commercial photography style.`;
+
+      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-3.1-flash-image-preview',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: scenePrompt },
+                { type: 'image_url', image_url: { url: image_url } }
+              ]
+            }
+          ],
+          modalities: ['image', 'text'],
+        }),
+      });
+
+      if (!response.ok) {
+        if (response.status === 429) return new Response(JSON.stringify({ success: false, error: 'Limite de requisições excedido' }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        if (response.status === 402) return new Response(JSON.stringify({ success: false, error: 'Créditos insuficientes' }), { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ success: false, error: `Scene generation failed: ${response.status}` }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      const data = await response.json();
+      const sceneUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+      if (!sceneUrl) return new Response(JSON.stringify({ success: false, error: 'Nenhuma imagem de cenário gerada' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
+      return new Response(JSON.stringify({ success: true, image_url: sceneUrl }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     return new Response(JSON.stringify({ success: false, error: 'Ação inválida' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 

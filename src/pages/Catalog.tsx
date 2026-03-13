@@ -426,24 +426,60 @@ export default function Catalog() {
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length === 0) return;
-
-    const file = files[0];
-    const ext = file.name.split(".").pop()?.toLowerCase();
-    const fakeEvent = { target: { files: [file], value: "" } } as unknown as React.ChangeEvent<HTMLInputElement>;
-
-    if (ext === "pdf") {
-      handlePdfImport(fakeEvent);
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    const supported = droppedFiles.filter((f) => {
+      const ext = f.name.split(".").pop()?.toLowerCase();
+      return ["xlsx", "xls", "csv", "pdf"].includes(ext || "");
+    });
+    if (supported.length === 0) {
+      toast({ title: "Formato não suportado", description: "Use .xlsx, .xls, .csv ou .pdf", variant: "destructive" });
       return;
     }
+    // Always open wizard for drag-and-drop (supports single + multi-file)
+    setWizardFiles(supported);
+    setWizardOpen(true);
+  };
 
-    if (["xlsx", "xls", "csv"].includes(ext || "")) {
-      handleFileImport(fakeEvent);
-      return;
+  const handleWizardConfirm = async (products: ParsedProduct[], files: File[]) => {
+    if (!user) throw new Error("Sessão expirada.");
+
+    const catalogId = selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized" ? selectedCatalogId : null;
+
+    // Batch insert products
+    const toInsert = products.map((p) => ({
+      user_id: user.id,
+      name: p.name,
+      description: p.description || null,
+      sku: p.sku || null,
+      cost: p.cost || 0,
+      price: p.price || 0,
+      stock: p.stock || 0,
+      brand: p.brand || null,
+      supplier_url: p.supplier_url || null,
+      status: "draft",
+      catalog_id: catalogId,
+    }));
+
+    const imported = await insertProductsInBatches(toInsert);
+
+    // Attach all files
+    for (const file of files) {
+      try {
+        await attachImportedFile(file, catalogId);
+      } catch (e) {
+        console.warn(`Failed to attach ${file.name}:`, e);
+      }
     }
 
-    toast({ title: "Formato não suportado", description: "Use .xlsx, .xls, .csv ou .pdf", variant: "destructive" });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["products"] }),
+      queryClient.invalidateQueries({ queryKey: ["catalog_files"] }),
+    ]);
+
+    toast({
+      title: `${imported} produtos importados`,
+      description: `${files.length} ficheiro(s) associado(s) com sucesso.`,
+    });
   };
 
   return (

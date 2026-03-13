@@ -14,6 +14,14 @@ export interface Product {
   stock: number;
   status: "active" | "inactive" | "draft";
   image_url: string | null;
+  sku: string | null;
+  supplier_url: string | null;
+  brand: string | null;
+  seo_title: string | null;
+  meta_description: string | null;
+  specifications: any[] | null;
+  tags: string[] | null;
+  last_enriched_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -28,7 +36,7 @@ export function useProducts() {
         .select("*")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as Product[];
+      return data as unknown as Product[];
     },
     enabled: !!user,
   });
@@ -39,7 +47,7 @@ export function useCreateProduct() {
   const { toast } = useToast();
   const { user } = useAuth();
   return useMutation({
-    mutationFn: async (product: Omit<Product, "id" | "user_id" | "created_at" | "updated_at">) => {
+    mutationFn: async (product: Omit<Product, "id" | "user_id" | "created_at" | "updated_at" | "last_enriched_at" | "specifications" | "tags" | "seo_title" | "meta_description" | "brand" | "supplier_url" | "sku"> & { sku?: string | null; supplier_url?: string | null; brand?: string | null }) => {
       const { data, error } = await supabase.from("products").insert([{ ...product, user_id: user!.id }]).select().single();
       if (error) throw error;
       return data;
@@ -58,7 +66,6 @@ export function useUpdateProduct() {
   const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<Product> & { id: string }) => {
-      // Record price change if price changed
       const { data: existing } = await supabase.from("products").select("price").eq("id", id).single();
       if (existing && updates.price !== undefined && existing.price !== updates.price) {
         await supabase.from("price_history").insert([{
@@ -68,14 +75,13 @@ export function useUpdateProduct() {
           new_price: updates.price,
         }]);
       }
-      const { data, error } = await supabase.from("products").update(updates).eq("id", id).select().single();
+      const { data, error } = await supabase.from("products").update(updates as any).eq("id", id).select().single();
       if (error) throw error;
       return data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["price_history"] });
-      toast({ title: "Produto atualizado!" });
     },
     onError: (e: Error) => toast({ title: "Erro", description: e.message, variant: "destructive" }),
   });

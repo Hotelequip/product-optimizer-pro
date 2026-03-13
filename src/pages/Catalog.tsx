@@ -456,6 +456,11 @@ export default function Catalog() {
     cancelRef.current = false;
     setFetchingImages(true);
     setImageDialogOpen(false);
+    const currentCatalogName = selectedCatalogId === "all"
+      ? "Todos os catálogos"
+      : selectedCatalogId === "uncategorized"
+      ? "Sem pasta"
+      : catalogs.find(c => c.id === selectedCatalogId)?.name || "Catálogo";
     setFetchProgress(null);
     try {
       let query = supabase

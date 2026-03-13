@@ -20,6 +20,7 @@ export default function Catalog() {
   const { data: products = [], isLoading } = useProducts();
   const { data: categories = [] } = useCategories();
   const createProduct = useCreateProduct();
+  const updateProduct = useUpdateProduct();
   const { toast } = useToast();
 
   const [search, setSearch] = useState("");

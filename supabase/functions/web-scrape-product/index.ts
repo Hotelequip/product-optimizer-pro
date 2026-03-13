@@ -421,17 +421,20 @@ Return JSON:
       }
 
       // Helper: scrape a URL and extract the best product image
+      // Uses multiple rendering strategies for JS-heavy sites
       async function scrapePageForImage(url: string, productName: string): Promise<string | null> {
         try {
           console.log(`Scraping for image: ${url}`);
+          
+          // Strategy A: Standard scrape with JS rendering wait
           const scrapeResp = await fetchWithRetry('https://api.firecrawl.dev/v1/scrape', {
             method: 'POST',
             headers: firecrawlHeaders,
             body: JSON.stringify({
               url,
               formats: ['markdown', 'html'],
-              onlyMainContent: true,
-              waitFor: 5000,
+              onlyMainContent: false, // Get full page for JS-rendered sites
+              waitFor: 8000, // Longer wait for JS rendering
             }),
           });
 
@@ -442,17 +445,38 @@ Return JSON:
           const html = scrapeData.data?.html || scrapeData.html || '';
           const combined = markdown + '\n' + html;
           
+          // Also check metadata for og:image, twitter:image
+          const metadata = scrapeData.data?.metadata || scrapeData.metadata || {};
+          const ogImage = metadata.ogImage || metadata['og:image'] || metadata.twitterImage || metadata['twitter:image'];
+          
           const images = extractImageUrls(combined);
+          
+          // Priority: og:image > product-like images > first image
+          if (ogImage && ogImage.startsWith('http') && !ogImage.toLowerCase().includes('logo')) {
+            return ogImage;
+          }
+          
           if (images.length > 0) {
-            // Prefer images with product-like patterns in URL
-            const productImg = images.find(u => {
+            // Score images by relevance
+            const scored = images.map(u => {
               const lower = u.toLowerCase();
-              return lower.includes('product') || lower.includes('upload') || lower.includes('media') || lower.includes('image');
+              let score = 0;
+              if (lower.includes('product')) score += 3;
+              if (lower.includes('upload')) score += 2;
+              if (lower.includes('media')) score += 2;
+              if (lower.includes('image')) score += 1;
+              if (lower.includes('wp-content')) score += 2;
+              if (lower.includes('cdn')) score += 1;
+              // Prefer larger images (often have dimensions in URL)
+              if (/\d{3,4}x\d{3,4}/.test(lower)) score += 1;
+              if (lower.includes('thumb') || lower.includes('150x') || lower.includes('100x')) score -= 2;
+              return { url: u, score };
             });
-            return productImg || images[0];
+            scored.sort((a, b) => b.score - a.score);
+            return scored[0].url;
           }
 
-          // AI fallback: extract from content
+          // Strategy B: AI extraction from content
           if (combined.length > 100) {
             const aiResp = await fetchWithRetry('https://ai.gateway.lovable.dev/v1/chat/completions', {
               method: 'POST',
@@ -461,7 +485,7 @@ Return JSON:
                 model: 'google/gemini-2.5-flash-lite',
                 messages: [{
                   role: 'user',
-                  content: `From this webpage content, find the main product image URL for "${productName}". Look for image URLs (jpg, png, webp) in markdown ![...](...), HTML <img src="...">, or raw URLs. Return ONLY the full URL starting with http. If none found, return "NONE".\n\n${combined.substring(0, 6000)}`,
+                  content: `From this webpage content, find the main product image URL for "${productName}". Look for image URLs (jpg, png, webp) in markdown ![...](...), HTML <img src="...">, data-src="...", data-lazy-src="...", srcset="...", or raw URLs. Also check for background-image CSS patterns. Return ONLY the full URL starting with http. If none found, return "NONE".\n\n${combined.substring(0, 8000)}`,
                 }],
               }),
             });

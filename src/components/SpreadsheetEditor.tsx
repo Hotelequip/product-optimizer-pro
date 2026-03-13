@@ -309,8 +309,54 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
         <div className="flex items-center gap-3 p-2 bg-muted/50 rounded-lg border flex-wrap">
           <span className="text-sm font-medium">{selectedProducts.size} selecionados</span>
           <Button size="sm" onClick={bulkEnrich} disabled={bulkEnriching}>
-            {bulkEnriching ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Zap className="mr-2 h-3 w-3" />}
-            Enriquecer em Massa
+            {bulkEnriching ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <Globe className="mr-2 h-3 w-3" />}
+            Web Scrape
+          </Button>
+          <Button size="sm" variant="secondary" onClick={async () => {
+            const selected = products.filter(p => selectedProducts.has(p.id));
+            if (selected.length === 0) return;
+            setBulkEnriching(true);
+            toast({ title: `Enriquecendo ${selected.length} produtos com IA...` });
+            let enriched = 0;
+            for (const p of selected) {
+              try { await enrichProduct(p); enriched++; } catch {}
+            }
+            toast({ title: `${enriched} produtos enriquecidos com IA!` });
+            setBulkEnriching(false);
+            setSelectedProducts(new Set());
+          }} disabled={bulkEnriching}>
+            <Wand2 className="mr-2 h-3 w-3" />IA Enriquecer
+          </Button>
+          <Button size="sm" variant="secondary" onClick={async () => {
+            const selected = products.filter(p => selectedProducts.has(p.id));
+            if (selected.length === 0) return;
+            setBulkEnriching(true);
+            toast({ title: `Gerando imagens para ${selected.length} produtos...` });
+            let generated = 0;
+            for (const p of selected) {
+              try { await generateImage(p); generated++; } catch {}
+            }
+            toast({ title: `${generated} imagens geradas!` });
+            setBulkEnriching(false);
+            setSelectedProducts(new Set());
+          }} disabled={bulkEnriching}>
+            <ImageIcon className="mr-2 h-3 w-3" />Gerar Imagens
+          </Button>
+          <Button size="sm" variant="outline" onClick={async () => {
+            const selected = products.filter(p => selectedProducts.has(p.id));
+            let approved = 0;
+            for (const p of selected) {
+              try {
+                const slug = slugify(p.optimized_title || p.seo_title || p.name);
+                const score = calcSeoScore(p);
+                await updateProduct.mutateAsync({ id: p.id, slug, seo_score: score, status: "active" });
+                approved++;
+              } catch {}
+            }
+            toast({ title: `${approved} produtos aprovados!` });
+            setSelectedProducts(new Set());
+          }}>
+            <Check className="mr-2 h-3 w-3" />Aprovar
           </Button>
           <div className="flex items-center gap-1">
             <FolderInput className="h-3.5 w-3.5 text-muted-foreground" />

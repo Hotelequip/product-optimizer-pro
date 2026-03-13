@@ -174,6 +174,22 @@ export default function Catalog() {
           imported++;
         } catch {}
       }
+      // Save file to catalog_files
+      try {
+        const fileName = `${Date.now()}-${file.name}`;
+        const { error: uploadErr } = await supabase.storage.from("catalog-files").upload(fileName, file, { upsert: true });
+        if (!uploadErr) {
+          const { data: urlData } = supabase.storage.from("catalog-files").getPublicUrl(fileName);
+          const ext2 = file.name.split(".").pop()?.toLowerCase() || "";
+          await addCatalogFile.mutateAsync({
+            catalog_id: catalogId,
+            file_name: file.name,
+            file_url: urlData.publicUrl,
+            file_type: ["xlsx", "xls", "csv"].includes(ext2) ? "excel" : "other",
+            file_size: file.size,
+          });
+        }
+      } catch {}
       toast({ title: `${imported} produtos importados de ${file.name}!` });
     } catch (err: any) {
       toast({ title: "Erro na importação", description: err.message, variant: "destructive" });

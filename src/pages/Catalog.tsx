@@ -39,6 +39,7 @@ export default function Catalog() {
   const [catalogSearch, setCatalogSearch] = useState("");
   const [editingCatalogId, setEditingCatalogId] = useState<string | null>(null);
   const [editingCatalogName, setEditingCatalogName] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
 
   // Filter products by selected catalog
   const filteredProducts = useMemo(() => {
@@ -193,9 +194,41 @@ export default function Catalog() {
     setImporting(false);
     e.target.value = "";
   }, [createProduct, toast, selectedCatalogId]);
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) return;
+    const file = files[0];
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (ext === "pdf") {
+      const fakeEvent = { target: { files: [file], value: "" } } as unknown as React.ChangeEvent<HTMLInputElement>;
+      handlePdfImport(fakeEvent);
+    } else if (["xlsx", "xls", "csv"].includes(ext || "")) {
+      const fakeEvent = { target: { files: [file], value: "" } } as unknown as React.ChangeEvent<HTMLInputElement>;
+      handleFileImport(fakeEvent);
+    } else {
+      toast({ title: "Formato não suportado", description: "Use .xlsx, .xls, .csv ou .pdf", variant: "destructive" });
+    }
+  }, [handleFileImport, handlePdfImport, toast]);
 
   return (
-    <div className="space-y-6">
+    <div
+      className="space-y-6 relative"
+      onDrop={handleDrop}
+      onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+      onDragLeave={(e) => { e.preventDefault(); if (e.currentTarget === e.target || !e.currentTarget.contains(e.relatedTarget as Node)) setIsDragging(false); }}
+    >
+      {/* Drag overlay */}
+      {isDragging && (
+        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+          <div className="border-2 border-dashed border-primary rounded-2xl p-12 text-center">
+            <Upload className="h-12 w-12 mx-auto mb-4 text-primary animate-bounce" />
+            <p className="text-lg font-semibold text-foreground">Solte o ficheiro aqui</p>
+            <p className="text-sm text-muted-foreground mt-1">Excel, CSV ou PDF</p>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold tracking-tight">
           {selectedCatalogId === "all"
@@ -390,11 +423,15 @@ export default function Catalog() {
               {isLoading ? (
                 <p className="text-muted-foreground text-sm">Carregando...</p>
               ) : filteredProducts.length === 0 ? (
-                <p className="text-muted-foreground text-sm text-center py-8">
-                  {products.length === 0
-                    ? "Nenhum produto encontrado. Importe um ficheiro Excel ou PDF."
-                    : "Nenhum produto nesta pasta."}
-                </p>
+                <div className="text-center py-12 space-y-3">
+                  <Upload className="h-10 w-10 mx-auto text-muted-foreground" />
+                  <p className="text-muted-foreground text-sm">
+                    {products.length === 0
+                      ? "Arraste um ficheiro Excel, CSV ou PDF para importar produtos"
+                      : "Nenhum produto nesta pasta."}
+                  </p>
+                  <p className="text-xs text-muted-foreground">ou use os botões acima</p>
+                </div>
               ) : (
                 <SpreadsheetEditor products={filteredProducts} />
               )}

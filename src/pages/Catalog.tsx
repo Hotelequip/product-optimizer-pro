@@ -290,10 +290,42 @@ export default function Catalog() {
             {catalogs
               .filter(cat => !catalogSearch || cat.name.toLowerCase().includes(catalogSearch.toLowerCase()))
               .map(cat => (
-              <DropdownMenuItem key={cat.id} className="gap-2 group" onClick={() => setSelectedCatalogId(cat.id)}>
-                <Folder className="h-4 w-4" />
-                <span className="flex-1 truncate">{cat.name}</span>
+              <DropdownMenuItem key={cat.id} className="gap-2 group" onClick={() => { if (editingCatalogId !== cat.id) setSelectedCatalogId(cat.id); }}>
+                <Folder className="h-4 w-4 shrink-0" />
+                {editingCatalogId === cat.id ? (
+                  <Input
+                    value={editingCatalogName}
+                    onChange={e => setEditingCatalogName(e.target.value)}
+                    onKeyDown={e => {
+                      e.stopPropagation();
+                      if (e.key === "Enter" && editingCatalogName.trim()) {
+                        renameCatalog.mutate({ id: cat.id, name: editingCatalogName.trim() });
+                        setEditingCatalogId(null);
+                      }
+                      if (e.key === "Escape") setEditingCatalogId(null);
+                    }}
+                    onClick={e => e.stopPropagation()}
+                    onBlur={() => {
+                      if (editingCatalogName.trim() && editingCatalogName !== cat.name) {
+                        renameCatalog.mutate({ id: cat.id, name: editingCatalogName.trim() });
+                      }
+                      setEditingCatalogId(null);
+                    }}
+                    className="h-6 text-xs flex-1"
+                    autoFocus
+                  />
+                ) : (
+                  <span className="flex-1 truncate">{cat.name}</span>
+                )}
                 <span className="text-xs text-muted-foreground">{catalogCounts[cat.id] || 0}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-foreground"
+                  onClick={(e) => { e.stopPropagation(); setEditingCatalogId(cat.id); setEditingCatalogName(cat.name); }}
+                >
+                  <Pencil className="h-3 w-3" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"

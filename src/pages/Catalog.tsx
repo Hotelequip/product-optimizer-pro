@@ -615,8 +615,7 @@ export default function Catalog() {
       description: `${files.length} ficheiro(s) associado(s).`,
     });
 
-    // Background: fetch images for products without image_url
-    fetchMissingImages();
+
   };
 
   return (

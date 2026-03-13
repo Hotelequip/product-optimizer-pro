@@ -1409,11 +1409,11 @@ function ImageGalleryTab({ products }: { products: Product[] }) {
         return;
       }
 
-      if (data.optimized_url) {
-        await supabase.from("products").update({ image_url: data.optimized_url } as any).eq("id", product.id);
+      if (data.image_url) {
+        await supabase.from("products").update({ image_url: data.image_url } as any).eq("id", product.id);
         queryClient.invalidateQueries({ queryKey: ["products"] });
         toast({ title: "Imagem otimizada!" });
-        setSelectedProduct({ ...product, image_url: data.optimized_url });
+        setSelectedProduct({ ...product, image_url: data.image_url });
       }
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });

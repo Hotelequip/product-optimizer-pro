@@ -32,6 +32,8 @@ export default function Catalog() {
   const deleteCatalog = useDeleteCatalog();
   const renameCatalog = useRenameCatalog();
   const addCatalogFile = useAddCatalogFile();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { toast } = useToast();
 
   const [dialogOpen, setDialogOpen] = useState(false);

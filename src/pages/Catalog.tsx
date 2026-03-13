@@ -76,9 +76,10 @@ export default function Catalog() {
 
   const handleCreateCatalog = async () => {
     if (!newCatalogName.trim()) return;
-    await createCatalog.mutateAsync(newCatalogName.trim());
+    await createCatalog.mutateAsync({ name: newCatalogName.trim(), supplier_url: newCatalogSupplierUrl.trim() || undefined });
     setNewCatalogName("");
-    setShowNewCatalogInput(false);
+    setNewCatalogSupplierUrl("");
+    setShowNewCatalogDialog(false);
   };
 
   const handleDeleteCatalog = async (id: string) => {

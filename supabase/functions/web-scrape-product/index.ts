@@ -583,8 +583,8 @@ Return JSON:
                     body: JSON.stringify({
                       url: searchUrl,
                       formats: ['markdown', 'html'],
-                      onlyMainContent: true,
-                      waitFor: 5000,
+                      onlyMainContent: false,
+                      waitFor: 8000,
                     }),
                   });
 

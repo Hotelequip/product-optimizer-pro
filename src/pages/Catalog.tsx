@@ -199,7 +199,7 @@ function OptimizedProductsTab({ products }: { products: Product[] }) {
   );
 }
 
-
+export default function Catalog() {
   const { data: products = [], isLoading } = useProducts();
   const { data: categories = [] } = useCategories();
   const { data: catalogs = [] } = useCatalogs();

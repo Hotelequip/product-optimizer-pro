@@ -119,44 +119,68 @@ export type Database = {
       }
       products: {
         Row: {
+          brand: string | null
           category_id: string | null
           cost: number
           created_at: string
           description: string | null
           id: string
           image_url: string | null
+          last_enriched_at: string | null
+          meta_description: string | null
           name: string
           price: number
+          seo_title: string | null
+          sku: string | null
+          specifications: Json | null
           status: Database["public"]["Enums"]["product_status"]
           stock: number
+          supplier_url: string | null
+          tags: string[] | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          brand?: string | null
           category_id?: string | null
           cost?: number
           created_at?: string
           description?: string | null
           id?: string
           image_url?: string | null
+          last_enriched_at?: string | null
+          meta_description?: string | null
           name: string
           price?: number
+          seo_title?: string | null
+          sku?: string | null
+          specifications?: Json | null
           status?: Database["public"]["Enums"]["product_status"]
           stock?: number
+          supplier_url?: string | null
+          tags?: string[] | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          brand?: string | null
           category_id?: string | null
           cost?: number
           created_at?: string
           description?: string | null
           id?: string
           image_url?: string | null
+          last_enriched_at?: string | null
+          meta_description?: string | null
           name?: string
           price?: number
+          seo_title?: string | null
+          sku?: string | null
+          specifications?: Json | null
           status?: Database["public"]["Enums"]["product_status"]
           stock?: number
+          supplier_url?: string | null
+          tags?: string[] | null
           updated_at?: string
           user_id?: string
         }

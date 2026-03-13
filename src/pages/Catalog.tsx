@@ -665,6 +665,10 @@ export default function Catalog() {
           }}>
             <FileUp className="mr-2 h-4 w-4" />PDF
           </Button>
+          <Button variant="outline" disabled={fetchingImages} onClick={fetchMissingImages}>
+            {fetchingImages ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
+            Buscar Imagens
+          </Button>
           <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingProduct(null); }}>
             <DialogTrigger asChild>
               <Button><Plus className="mr-2 h-4 w-4" />Novo Produto</Button>

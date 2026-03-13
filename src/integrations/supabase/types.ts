@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      catalogs: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           created_at: string
@@ -120,6 +141,7 @@ export type Database = {
       products: {
         Row: {
           brand: string | null
+          catalog_id: string | null
           category_id: string | null
           cost: number
           created_at: string
@@ -147,6 +169,7 @@ export type Database = {
         }
         Insert: {
           brand?: string | null
+          catalog_id?: string | null
           category_id?: string | null
           cost?: number
           created_at?: string
@@ -174,6 +197,7 @@ export type Database = {
         }
         Update: {
           brand?: string | null
+          catalog_id?: string | null
           category_id?: string | null
           cost?: number
           created_at?: string
@@ -200,6 +224,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "products_catalog_id_fkey"
+            columns: ["catalog_id"]
+            isOneToOne: false
+            referencedRelation: "catalogs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "products_category_id_fkey"
             columns: ["category_id"]

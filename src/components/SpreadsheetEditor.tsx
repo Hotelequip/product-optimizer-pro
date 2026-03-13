@@ -317,7 +317,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-muted/50 border-b">
-              <th className="p-2 w-8"><Checkbox checked={selectedProducts.size === products.length && products.length > 0} onCheckedChange={toggleAll} /></th>
+              <th className="p-2 w-8"><Checkbox checked={selectedProducts.size === filteredProducts.length && filteredProducts.length > 0} onCheckedChange={toggleAll} /></th>
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-24">SKU</th>
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground min-w-[160px]">Título Original</th>
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground min-w-[160px]">Título Otimizado</th>
@@ -327,11 +327,52 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-36">Estado</th>
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-20">Fases</th>
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-12">SEO</th>
-              <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-28">Ações</th>
+              <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-28">
+                {hasFilters && (
+                  <Button variant="ghost" size="sm" className="h-5 text-[10px] px-1" onClick={clearFilters} title="Limpar filtros">
+                    <X className="h-3 w-3 mr-0.5" />Limpar
+                  </Button>
+                )}
+              </th>
+            </tr>
+            {/* Filter row */}
+            <tr className="border-b bg-muted/20">
+              <td className="p-1"><Filter className="h-3 w-3 text-muted-foreground mx-auto" /></td>
+              <td className="p-1"><Input placeholder="SKU..." value={columnFilters.sku || ""} onChange={e => setFilter("sku", e.target.value)} className="h-6 text-[10px] px-1" /></td>
+              <td className="p-1"><Input placeholder="Título..." value={columnFilters.name || ""} onChange={e => setFilter("name", e.target.value)} className="h-6 text-[10px] px-1" /></td>
+              <td className="p-1"><Input placeholder="Otimizado..." value={columnFilters.optimized_title || ""} onChange={e => setFilter("optimized_title", e.target.value)} className="h-6 text-[10px] px-1" /></td>
+              <td className="p-1"><Input placeholder="Categoria..." value={columnFilters.category || ""} onChange={e => setFilter("category", e.target.value)} className="h-6 text-[10px] px-1" /></td>
+              <td className="p-1"><Input placeholder="Desc..." value={columnFilters.short_description || ""} onChange={e => setFilter("short_description", e.target.value)} className="h-6 text-[10px] px-1" /></td>
+              <td className="p-1"><Input placeholder="Slug..." value={columnFilters.slug || ""} onChange={e => setFilter("slug", e.target.value)} className="h-6 text-[10px] px-1" /></td>
+              <td className="p-1">
+                <Select value={columnFilters.status || "all"} onValueChange={v => setFilter("status", v === "all" ? "" : v)}>
+                  <SelectTrigger className="h-6 text-[10px] px-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="active">Publicado</SelectItem>
+                    <SelectItem value="inactive">Inativo</SelectItem>
+                    <SelectItem value="draft">Pendente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </td>
+              <td className="p-1">
+                <Select value={columnFilters.enrichment_phase || "all"} onValueChange={v => setFilter("enrichment_phase", v === "all" ? "" : v)}>
+                  <SelectTrigger className="h-6 text-[10px] px-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="0">0</SelectItem>
+                    <SelectItem value="1">1</SelectItem>
+                    <SelectItem value="2">2</SelectItem>
+                    <SelectItem value="3">3</SelectItem>
+                  </SelectContent>
+                </Select>
+              </td>
+              <td className="p-1"></td>
+              <td className="p-1"></td>
             </tr>
           </thead>
           <tbody>
-            {products.map((product) => (
+            {filteredProducts.map((product) => (
               <tr key={product.id} className="border-b hover:bg-muted/30 transition-colors">
                 <td className="p-2 text-center">
                   <Checkbox checked={selectedProducts.has(product.id)} onCheckedChange={() => toggleProduct(product.id)} />

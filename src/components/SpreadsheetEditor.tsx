@@ -559,6 +559,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
               <td className="p-1"></td>
               <td className="p-1"></td>
               <td className="p-1"></td>
+              <td className="p-1"></td>
               <td className="p-1">
                 <Select value={columnFilters.status || "all"} onValueChange={v => setFilter("status", v === "all" ? "" : v)}>
                   <SelectTrigger className="h-6 text-[10px] px-1"><SelectValue /></SelectTrigger>

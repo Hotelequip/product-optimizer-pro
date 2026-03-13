@@ -139,7 +139,12 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
         toast({ title: "Erro ao enriquecer", description: data.error, variant: "destructive" });
       }
     } catch (e: any) {
-      toast({ title: "Erro", description: e.message, variant: "destructive" });
+      const msg = e.message || "";
+      if (msg.includes("402") || msg.includes("créditos") || msg.includes("insuficientes")) {
+        toast({ title: "Créditos insuficientes", description: "Adiciona créditos em Settings → Workspace → Usage para usar a IA.", variant: "destructive" });
+      } else {
+        toast({ title: "Erro", description: msg, variant: "destructive" });
+      }
     }
     setEnrichingId(null);
   };
@@ -197,7 +202,12 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
         toast({ title: data.message || "Nenhum dado encontrado", variant: "destructive" });
       }
     } catch (e: any) {
-      toast({ title: "Erro no web scraping", description: e.message, variant: "destructive" });
+      const msg = e.message || "";
+      if (msg.includes("402") || msg.includes("créditos") || msg.includes("insuficientes")) {
+        toast({ title: "Créditos insuficientes", description: "Adiciona créditos em Settings → Workspace → Usage.", variant: "destructive" });
+      } else {
+        toast({ title: "Erro no web scraping", description: msg, variant: "destructive" });
+      }
     }
     setScrapingId(null);
   };
@@ -517,11 +527,16 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
 
       {/* Single product operation progress */}
       {(enrichingId || scrapingId || generatingImageId) && (
-        <div className="flex items-center gap-3 px-3 py-2 bg-primary/5 border rounded-lg">
-          <Loader2 className="h-4 w-4 animate-spin text-primary flex-shrink-0" />
-          <Progress className="flex-1 h-2" />
-          <span className="text-xs text-muted-foreground whitespace-nowrap">
-            {enrichingId ? "IA Enriquecendo..." : scrapingId ? "Web Scraping..." : "Gerando imagem..."}
+        <div className="flex items-center gap-3 px-3 py-3 bg-primary/10 border border-primary/20 rounded-lg animate-pulse">
+          <Loader2 className="h-5 w-5 animate-spin text-primary flex-shrink-0" />
+          <div className="flex-1">
+            <div className="h-2 rounded-full bg-muted overflow-hidden">
+              <div className="h-full bg-primary rounded-full animate-[indeterminate_1.5s_ease-in-out_infinite]" 
+                style={{ width: '40%' }} />
+            </div>
+          </div>
+          <span className="text-sm font-medium text-primary whitespace-nowrap">
+            {enrichingId ? "⚡ IA Enriquecendo..." : scrapingId ? "🌐 Web Scraping..." : "🖼️ Gerando imagem..."}
             {" "}{products.find(p => p.id === (enrichingId || scrapingId || generatingImageId))?.name?.substring(0, 30)}
           </span>
         </div>

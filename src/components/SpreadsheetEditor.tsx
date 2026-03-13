@@ -245,6 +245,16 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7"
+                      onClick={() => scrapeProduct(product)}
+                      disabled={scrapingId === product.id}
+                      title="Buscar dados na web"
+                    >
+                      {scrapingId === product.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Globe className="h-3 w-3" />}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
                       onClick={() => enrichProduct(product)}
                       disabled={enrichingId === product.id}
                       title="Enriquecer com IA"

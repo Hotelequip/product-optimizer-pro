@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Product, useUpdateProduct } from "@/hooks/useProducts";
 import { useCategories } from "@/hooks/useCategories";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Wand2, Image as ImageIcon, Loader2, Globe, Zap, Pencil, Settings, Check, ExternalLink } from "lucide-react";
+import { Wand2, Image as ImageIcon, Loader2, Globe, Zap, Pencil, Settings, Check, ExternalLink, Filter, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -44,6 +44,41 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
   const [bulkEnriching, setBulkEnriching] = useState(false);
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+
+  const setFilter = (col: string, value: string) => {
+    setColumnFilters(prev => {
+      const next = { ...prev };
+      if (value) next[col] = value; else delete next[col];
+      return next;
+    });
+  };
+  const clearFilters = () => setColumnFilters({});
+  const hasFilters = Object.keys(columnFilters).length > 0;
+
+  const filteredProducts = useMemo(() => {
+    if (!hasFilters) return products;
+    return products.filter(p => {
+      for (const [col, val] of Object.entries(columnFilters)) {
+        const v = val.toLowerCase();
+        if (col === "sku" && !(p.sku || "").toLowerCase().includes(v)) return false;
+        if (col === "name" && !p.name.toLowerCase().includes(v)) return false;
+        if (col === "optimized_title" && !(p.optimized_title || "").toLowerCase().includes(v)) return false;
+        if (col === "category") {
+          const catName = categories.find(c => c.id === p.category_id)?.name || "";
+          if (!catName.toLowerCase().includes(v)) return false;
+        }
+        if (col === "short_description" && !(p.short_description || "").toLowerCase().includes(v)) return false;
+        if (col === "slug" && !(p.slug || "").toLowerCase().includes(v)) return false;
+        if (col === "status" && v !== "all" && p.status !== v) return false;
+        if (col === "enrichment_phase" && v !== "all") {
+          const phase = p.enrichment_phase || 0;
+          if (String(phase) !== v) return false;
+        }
+      }
+      return true;
+    });
+  }, [products, columnFilters, categories]);
 
   const startEdit = (productId: string, field: string, currentValue: any) => {
     setEditingCell({ productId, field });
@@ -282,7 +317,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-muted/50 border-b">
-              <th className="p-2 w-8"><Checkbox checked={selectedProducts.size === products.length && products.length > 0} onCheckedChange={toggleAll} /></th>
+              <th className="p-2 w-8"><Checkbox checked={selectedProducts.size === filteredProducts.length && filteredProducts.length > 0} onCheckedChange={toggleAll} /></th>
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-24">SKU</th>
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground min-w-[160px]">Título Original</th>
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground min-w-[160px]">Título Otimizado</th>
@@ -292,11 +327,52 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-36">Estado</th>
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-20">Fases</th>
               <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-12">SEO</th>
-              <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-28">Ações</th>
+              <th className="text-left p-2 text-[10px] font-medium text-muted-foreground w-28">
+                {hasFilters && (
+                  <Button variant="ghost" size="sm" className="h-5 text-[10px] px-1" onClick={clearFilters} title="Limpar filtros">
+                    <X className="h-3 w-3 mr-0.5" />Limpar
+                  </Button>
+                )}
+              </th>
+            </tr>
+            {/* Filter row */}
+            <tr className="border-b bg-muted/20">
+              <td className="p-1"><Filter className="h-3 w-3 text-muted-foreground mx-auto" /></td>
+              <td className="p-1"><Input placeholder="SKU..." value={columnFilters.sku || ""} onChange={e => setFilter("sku", e.target.value)} className="h-6 text-[10px] px-1" /></td>
+              <td className="p-1"><Input placeholder="Título..." value={columnFilters.name || ""} onChange={e => setFilter("name", e.target.value)} className="h-6 text-[10px] px-1" /></td>
+              <td className="p-1"><Input placeholder="Otimizado..." value={columnFilters.optimized_title || ""} onChange={e => setFilter("optimized_title", e.target.value)} className="h-6 text-[10px] px-1" /></td>
+              <td className="p-1"><Input placeholder="Categoria..." value={columnFilters.category || ""} onChange={e => setFilter("category", e.target.value)} className="h-6 text-[10px] px-1" /></td>
+              <td className="p-1"><Input placeholder="Desc..." value={columnFilters.short_description || ""} onChange={e => setFilter("short_description", e.target.value)} className="h-6 text-[10px] px-1" /></td>
+              <td className="p-1"><Input placeholder="Slug..." value={columnFilters.slug || ""} onChange={e => setFilter("slug", e.target.value)} className="h-6 text-[10px] px-1" /></td>
+              <td className="p-1">
+                <Select value={columnFilters.status || "all"} onValueChange={v => setFilter("status", v === "all" ? "" : v)}>
+                  <SelectTrigger className="h-6 text-[10px] px-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="active">Publicado</SelectItem>
+                    <SelectItem value="inactive">Inativo</SelectItem>
+                    <SelectItem value="draft">Pendente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </td>
+              <td className="p-1">
+                <Select value={columnFilters.enrichment_phase || "all"} onValueChange={v => setFilter("enrichment_phase", v === "all" ? "" : v)}>
+                  <SelectTrigger className="h-6 text-[10px] px-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="0">0</SelectItem>
+                    <SelectItem value="1">1</SelectItem>
+                    <SelectItem value="2">2</SelectItem>
+                    <SelectItem value="3">3</SelectItem>
+                  </SelectContent>
+                </Select>
+              </td>
+              <td className="p-1"></td>
+              <td className="p-1"></td>
             </tr>
           </thead>
           <tbody>
-            {products.map((product) => (
+            {filteredProducts.map((product) => (
               <tr key={product.id} className="border-b hover:bg-muted/30 transition-colors">
                 <td className="p-2 text-center">
                   <Checkbox checked={selectedProducts.has(product.id)} onCheckedChange={() => toggleProduct(product.id)} />

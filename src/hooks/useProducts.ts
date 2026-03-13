@@ -37,9 +37,10 @@ export function useProducts() {
 export function useCreateProduct() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (product: Omit<Product, "id" | "user_id" | "created_at" | "updated_at">) => {
-      const { data, error } = await supabase.from("products").insert(product).select().single();
+      const { data, error } = await supabase.from("products").insert([{ ...product, user_id: user!.id }]).select().single();
       if (error) throw error;
       return data;
     },

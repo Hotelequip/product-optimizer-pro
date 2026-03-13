@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, product_name, supplier_url, sku, products } = await req.json();
+    const { action, product_name, supplier_url, sku, products, base_supplier_url } = await req.json();
 
     const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
     if (!FIRECRAWL_API_KEY) {

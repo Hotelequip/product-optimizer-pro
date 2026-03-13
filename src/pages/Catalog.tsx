@@ -1043,15 +1043,15 @@ export default function Catalog() {
         </DialogContent>
       </Dialog>
 
-      {/* Image fetch dialog */}
+      {/* Image fetch + enrich dialog */}
       <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Buscar Imagens de Produtos</DialogTitle>
+            <DialogTitle>Buscar Imagens e Enriquecer Dados</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Indique o URL base do fornecedor para procurar imagens dos produtos.
+              Procura imagens e informação adicional (descrições, especificações, SEO) para os produtos da pasta selecionada.
             </p>
             <div className="space-y-2">
               <Label>URL do Fornecedor (opcional)</Label>
@@ -1060,15 +1060,27 @@ export default function Catalog() {
                 value={supplierBaseUrl}
                 onChange={(e) => setSupplierBaseUrl(e.target.value)}
               />
+              <p className="text-xs text-muted-foreground">
+                Melhora a precisão da busca de imagens e dados
+              </p>
             </div>
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setImageDialogOpen(false)}>Cancelar</Button>
+            <div className="flex flex-col gap-2">
               <Button
                 disabled={fetchingImages}
-                onClick={() => fetchMissingImages(supplierBaseUrl.trim() || undefined)}
+                onClick={() => fetchAndEnrich(supplierBaseUrl.trim() || undefined, true)}
+                className="w-full"
+              >
+                {fetchingImages ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                Buscar Imagens + Enriquecer Dados
+              </Button>
+              <Button
+                variant="outline"
+                disabled={fetchingImages}
+                onClick={() => fetchAndEnrich(supplierBaseUrl.trim() || undefined, false)}
+                className="w-full"
               >
                 {fetchingImages ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ImageIcon className="mr-2 h-4 w-4" />}
-                Iniciar Busca
+                Apenas Imagens
               </Button>
             </div>
           </div>

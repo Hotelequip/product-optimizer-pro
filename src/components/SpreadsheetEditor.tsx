@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Wand2, Image as ImageIcon, Loader2, Check, X } from "lucide-react";
+import { Wand2, Image as ImageIcon, Loader2, Check, X, Globe } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -22,6 +22,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
   const [editValue, setEditValue] = useState("");
   const [enrichingId, setEnrichingId] = useState<string | null>(null);
   const [generatingImageId, setGeneratingImageId] = useState<string | null>(null);
+  const [scrapingId, setScrapingId] = useState<string | null>(null);
 
   const startEdit = (productId: string, field: string, currentValue: any) => {
     setEditingCell({ productId, field });
@@ -99,6 +100,32 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
     setGeneratingImageId(null);
   };
 
+  const scrapeProduct = async (product: Product) => {
+    setScrapingId(product.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("web-scrape-product", {
+        body: { product_name: product.name },
+      });
+      if (error) throw error;
+      if (data.success && data.enriched) {
+        const updates: any = { id: product.id };
+        if (data.enriched.description) updates.description = data.enriched.description;
+        await updateProduct.mutateAsync(updates);
+        toast({
+          title: "Dados encontrados na web!",
+          description: data.enriched.specifications
+            ? `${data.enriched.specifications.length} especificações encontradas`
+            : "Descrição atualizada",
+        });
+      } else {
+        toast({ title: "Nenhum dado encontrado na web", variant: "destructive" });
+      }
+    } catch (e: any) {
+      toast({ title: "Erro no web scraping", description: e.message, variant: "destructive" });
+    }
+    setScrapingId(null);
+  };
+
   const isEditing = (productId: string, field: string) =>
     editingCell?.productId === productId && editingCell?.field === field;
 
@@ -152,7 +179,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
             <th className="text-left p-2 text-xs font-medium text-muted-foreground w-24">Preço</th>
             <th className="text-left p-2 text-xs font-medium text-muted-foreground w-20">Estoque</th>
             <th className="text-left p-2 text-xs font-medium text-muted-foreground w-24">Status</th>
-            <th className="text-left p-2 text-xs font-medium text-muted-foreground w-28">IA</th>
+            <th className="text-left p-2 text-xs font-medium text-muted-foreground w-36">IA</th>
           </tr>
         </thead>
         <tbody>
@@ -214,6 +241,16 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
                 </td>
                 <td className="p-1">
                   <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => scrapeProduct(product)}
+                      disabled={scrapingId === product.id}
+                      title="Buscar dados na web"
+                    >
+                      {scrapingId === product.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Globe className="h-3 w-3" />}
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"

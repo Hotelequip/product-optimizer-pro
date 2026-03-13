@@ -445,22 +445,81 @@ export default function Catalog() {
 
     const catalogId = selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized" ? selectedCatalogId : null;
 
-    // Batch insert products
-    const toInsert = products.map((p) => ({
-      user_id: user.id,
-      name: p.name,
-      description: p.description || null,
-      sku: p.sku || null,
-      cost: p.cost || 0,
-      price: p.price || 0,
-      stock: p.stock || 0,
-      brand: p.brand || null,
-      supplier_url: p.supplier_url || null,
-      status: "draft",
-      catalog_id: catalogId,
-    }));
+    // Fetch existing products for this user to match against
+    const { data: existingProducts } = await supabase
+      .from("products")
+      .select("id, sku, name, catalog_id")
+      .eq("user_id", user.id);
 
-    const imported = await insertProductsInBatches(toInsert);
+    const existing = existingProducts || [];
+
+    // Build lookup maps for matching
+    const bySku = new Map<string, { id: string; catalog_id: string | null }>();
+    const byName = new Map<string, { id: string; catalog_id: string | null }>();
+    for (const p of existing) {
+      if (p.sku) bySku.set(p.sku.toLowerCase().trim(), { id: p.id, catalog_id: p.catalog_id });
+      byName.set(p.name.toLowerCase().trim(), { id: p.id, catalog_id: p.catalog_id });
+    }
+
+    const toInsert: Array<Record<string, unknown>> = [];
+    const toUpdate: Array<{ id: string; updates: Record<string, unknown> }> = [];
+
+    for (const p of products) {
+      // Try to match by SKU first, then by name
+      const skuKey = p.sku?.toLowerCase().trim();
+      const nameKey = p.name.toLowerCase().trim();
+      const match = (skuKey ? bySku.get(skuKey) : undefined) || byName.get(nameKey);
+
+      if (match) {
+        // Update existing product — only update fields that have values
+        const updates: Record<string, unknown> = {};
+        if (p.description) updates.description = p.description;
+        if (p.sku) updates.sku = p.sku;
+        if (p.cost > 0) updates.cost = p.cost;
+        if (p.price > 0) updates.price = p.price;
+        if (p.stock > 0) updates.stock = p.stock;
+        if (p.brand) updates.brand = p.brand;
+        if (p.supplier_url) updates.supplier_url = p.supplier_url;
+        if (catalogId && !match.catalog_id) updates.catalog_id = catalogId;
+
+        if (Object.keys(updates).length > 0) {
+          toUpdate.push({ id: match.id, updates });
+        }
+      } else {
+        toInsert.push({
+          user_id: user.id,
+          name: p.name,
+          description: p.description || null,
+          sku: p.sku || null,
+          cost: p.cost || 0,
+          price: p.price || 0,
+          stock: p.stock || 0,
+          brand: p.brand || null,
+          supplier_url: p.supplier_url || null,
+          status: "draft",
+          catalog_id: catalogId,
+        });
+      }
+    }
+
+    // Batch insert new products
+    let inserted = 0;
+    if (toInsert.length > 0) {
+      inserted = await insertProductsInBatches(toInsert);
+    }
+
+    // Batch update existing products
+    let updated = 0;
+    const UPDATE_BATCH = 50;
+    for (let i = 0; i < toUpdate.length; i += UPDATE_BATCH) {
+      const chunk = toUpdate.slice(i, i + UPDATE_BATCH);
+      await Promise.all(
+        chunk.map(({ id, updates }) =>
+          supabase.from("products").update(updates as any).eq("id", id)
+        )
+      );
+      updated += chunk.length;
+    }
 
     // Attach all files
     for (const file of files) {
@@ -476,9 +535,13 @@ export default function Catalog() {
       queryClient.invalidateQueries({ queryKey: ["catalog_files"] }),
     ]);
 
+    const parts: string[] = [];
+    if (inserted > 0) parts.push(`${inserted} novos`);
+    if (updated > 0) parts.push(`${updated} atualizados`);
+
     toast({
-      title: `${imported} produtos importados`,
-      description: `${files.length} ficheiro(s) associado(s) com sucesso.`,
+      title: `${parts.join(" · ")} produtos`,
+      description: `${files.length} ficheiro(s) associado(s).`,
     });
   };
 

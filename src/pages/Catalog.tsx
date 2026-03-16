@@ -1990,6 +1990,19 @@ function InlineProductForm({
 
 
 
+// Helper: extract first URL from potentially comma-separated image_url
+function getFirstImageUrl(imageUrl: string | null | undefined): string | null {
+  if (!imageUrl) return null;
+  const first = imageUrl.split(",")[0].trim();
+  return first.startsWith("http") ? first : null;
+}
+
+// Helper: extract all URLs from comma-separated image_url
+function getAllImageUrls(imageUrl: string | null | undefined): string[] {
+  if (!imageUrl) return [];
+  return imageUrl.split(",").map(u => u.trim()).filter(u => u.startsWith("http"));
+}
+
 function ImageGalleryTab({ products }: { products: Product[] }) {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [generatingAi, setGeneratingAi] = useState(false);
@@ -1997,8 +2010,8 @@ function ImageGalleryTab({ products }: { products: Product[] }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const withImage = products.filter(p => p.image_url);
-  const withoutImage = products.filter(p => !p.image_url);
+  const withImage = products.filter(p => getFirstImageUrl(p.image_url));
+  const withoutImage = products.filter(p => !getFirstImageUrl(p.image_url));
 
   const handleGenerateAiImage = async (product: Product) => {
     if (generatingAi) return;

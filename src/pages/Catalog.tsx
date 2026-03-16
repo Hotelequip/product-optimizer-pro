@@ -1030,36 +1030,55 @@ export default function Catalog() {
             ? "Catálogo — Sem pasta"
             : `Catálogo ${catalogs.find(c => c.id === selectedCatalogId)?.name || ""}`}
         </h1>
-        <div className="flex gap-2">
-          <Button variant="outline" disabled={importing} onClick={() => {
-            const input = document.createElement("input");
-            input.type = "file";
-            input.accept = ".xlsx,.xls,.csv";
-            input.multiple = true;
-            input.onchange = (ev) => {
-              const selected = Array.from((ev.target as HTMLInputElement).files || []);
-              if (selected.length > 0) { setWizardFiles(selected); setWizardOpen(true); }
-            };
-            input.click();
-          }}>
-            {importing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-            Excel/CSV
-          </Button>
-          <Button variant="outline" disabled={importing} onClick={() => {
-            const input = document.createElement("input");
-            input.type = "file";
-            input.accept = ".pdf";
-            input.multiple = true;
-            input.onchange = (ev) => {
-              const selected = Array.from((ev.target as HTMLInputElement).files || []);
-              if (selected.length > 0) { setWizardFiles(selected); setWizardOpen(true); }
-            };
-            input.click();
-          }}>
-            <FileUp className="mr-2 h-4 w-4" />PDF
-          </Button>
+        <div className="flex gap-2 flex-wrap">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" disabled={importing}>
+                {importing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                Importar / Atualizar
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={() => {
+                const input = document.createElement("input");
+                input.type = "file";
+                input.accept = ".xlsx,.xls,.csv";
+                input.multiple = true;
+                input.onchange = (ev) => {
+                  const selected = Array.from((ev.target as HTMLInputElement).files || []);
+                  if (selected.length > 0) { setWizardFiles(selected); setWizardOpen(true); }
+                };
+                input.click();
+              }}>
+                <Sheet className="mr-2 h-4 w-4" />
+                Excel / CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => {
+                const input = document.createElement("input");
+                input.type = "file";
+                input.accept = ".pdf";
+                input.multiple = true;
+                input.onchange = (ev) => {
+                  const selected = Array.from((ev.target as HTMLInputElement).files || []);
+                  if (selected.length > 0) { setWizardFiles(selected); setWizardOpen(true); }
+                };
+                input.click();
+              }}>
+                <FileUp className="mr-2 h-4 w-4" />
+                PDF
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => {
+                // Switch to WooCommerce tab for import
+                const wooTab = document.querySelector('[data-value="woo"]') as HTMLElement;
+                if (wooTab) wooTab.click();
+              }}>
+                <Download className="mr-2 h-4 w-4" />
+                WooCommerce (API)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="outline" disabled={fetchingImages} onClick={() => {
-            // Pre-fill with current catalog's supplier URL if available
             const currentCatalog = catalogs.find(c => c.id === selectedCatalogId);
             setSupplierBaseUrl(currentCatalog?.supplier_url || "");
             setImageDialogOpen(true);

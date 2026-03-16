@@ -1773,12 +1773,16 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
 
       let updated = 0;
       for (const row of rows) {
-        const sku = findVal(row, ["ref","sku","referencia","codigo","code","cod"]).trim();
-        const name = findVal(row, ["description","descricao","name","nome","titulo","title","produto","designacao"]).trim();
-        const rawImageUrl = findVal(row, ["image url","image_url","imagens","imagem","image","images","foto","photo","thumbnail"]).trim();
-        const supplierUrl = findVal(row, ["supplier_url","supplier url","fornecedor_url","fornecedor url","link fornecedor"]).trim();
-        const ean = findVal(row, ["ean","gtin","barcode","codigo barras"]).trim();
-        const brand = findVal(row, ["brand","marca"]).trim();
+        const sku = findField(row, "sku").trim();
+        const name = findField(row, "name").trim();
+        const rawImageUrl = findField(row, "image_url").trim();
+        const supplierUrl = findField(row, "supplier_url").trim();
+        const ean = findField(row, "ean").trim();
+        const brand = findField(row, "brand").trim();
+        const description = findField(row, "description").trim();
+        const shortDesc = findField(row, "short_description").trim();
+        const seoTitle = findField(row, "meta_title").trim();
+        const metaDesc = findField(row, "meta_description").trim();
 
         // Match product by SKU first, then by name
         const match = (sku && bySkuMap.get(sku.toLowerCase())) || (name && byNameMap.get(name.toLowerCase()));

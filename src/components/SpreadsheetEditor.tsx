@@ -3,6 +3,7 @@ import { Product, useUpdateProduct, useDeleteProduct } from "@/hooks/useProducts
 import { useAllVariations, ProductVariation } from "@/hooks/useProductVariations";
 import { useCategories } from "@/hooks/useCategories";
 import { useCatalogs } from "@/hooks/useCatalogs";
+import { useWooStores } from "@/hooks/useWooStores";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
-import { Wand2, Image as ImageIcon, Loader2, Globe, Zap, Pencil, Settings, Check, ExternalLink, Filter, X, FolderInput, Trash2, FileSpreadsheet } from "lucide-react";
+import { Wand2, Image as ImageIcon, Loader2, Globe, Zap, Pencil, Settings, Check, ExternalLink, Filter, X, FolderInput, Trash2, FileSpreadsheet, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -41,6 +42,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
   const { data: catalogs = [] } = useCatalogs();
   const { data: categories = [] } = useCategories();
   const { data: allVariations = [] } = useAllVariations();
+  const { data: wooStores = [] } = useWooStores();
   const { toast } = useToast();
   const [editingCell, setEditingCell] = useState<EditableCell | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -52,6 +54,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const [syncingWoo, setSyncingWoo] = useState(false);
 
   const setFilter = (col: string, value: string) => {
     setColumnFilters(prev => {
@@ -566,6 +569,46 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
             }}>
               <Check className="mr-2 h-3 w-3" />Aprovar
             </Button>
+            {/* WooCommerce Sync */}
+            {wooStores.length > 0 && (
+              <div className="flex items-center gap-1">
+                <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+                <Select onValueChange={async (storeId) => {
+                  const selected = products.filter(p => selectedProducts.has(p.id));
+                  if (selected.length === 0) return;
+                  setSyncingWoo(true);
+                  setBulkEnriching(true);
+                  setBulkProgress({ current: 0, total: selected.length, label: "WooCommerce" });
+                  try {
+                    const { data, error } = await supabase.functions.invoke("woo-sync", {
+                      body: { action: "export", store_id: storeId, products: selected },
+                    });
+                    if (error) throw error;
+                    if (data?.success) {
+                      const totalCreated = data.results?.reduce((sum: number, r: any) => sum + (r.created || 0), 0) || 0;
+                      toast({ title: `${totalCreated} produtos enviados para WooCommerce!` });
+                    } else {
+                      toast({ title: "Erro ao sincronizar", description: data?.error, variant: "destructive" });
+                    }
+                  } catch (e: any) {
+                    toast({ title: "Erro", description: e.message, variant: "destructive" });
+                  }
+                  setSyncingWoo(false);
+                  setBulkEnriching(false);
+                  setBulkProgress({ current: 0, total: 0, label: "" });
+                  setSelectedProducts(new Set());
+                }}>
+                  <SelectTrigger className="h-7 text-xs w-44">
+                    <SelectValue placeholder={syncingWoo ? "Enviando..." : "Enviar p/ WooCommerce"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {wooStores.filter(s => s.is_active).map(s => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="flex items-center gap-1">
               <FolderInput className="h-3.5 w-3.5 text-muted-foreground" />
               <Select onValueChange={async (catalogId) => {

@@ -1490,25 +1490,75 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
         pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
         const arrayBuffer = await blob.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        let fullText = "";
+
+        // Extract text page by page and try to identify products from raw text
+        const pageTexts: string[] = [];
         for (let i = 1; i <= pdf.numPages; i++) {
           const page = await pdf.getPage(i);
           const content = await page.getTextContent();
-          fullText += content.items.map((item: any) => item.str).join(" ") + "\n";
+          const items = content.items as any[];
+          const text = items.map(item => item.str).join(" ").replace(/\s+/g, " ").trim();
+          if (text.length > 10) pageTexts.push(text);
         }
-        if (!fullText.trim()) throw new Error("PDF vazio — sem texto extraível.");
+        if (pageTexts.length === 0) throw new Error("PDF vazio — sem texto extraível.");
 
-        const { data, error } = await supabase.functions.invoke("extract-products", { body: { text: fullText } });
-        if (error) throw error;
-        if (!data?.success || !data.products?.length) throw new Error("Nenhum produto identificado no PDF.");
+        // Client-side extraction: find prices (€/$) and product-like names
+        const priceRegex = /(\d[\d.,]*)\s*[€$]/g;
+        const eurRegex = /[€$]\s*(\d[\d.,]*)/g;
+        const fullText = pageTexts.join("\n");
 
-        productsToInsert = data.products.map((p: any) => ({
-          user_id: user.id, name: String(p?.name || "").trim(),
-          description: p?.description || null, sku: p?.sku || null,
-          cost: parseNum(p?.cost), price: parseNum(p?.price),
-          stock: Math.max(0, Math.trunc(parseNum(p?.stock))),
-          brand: p?.brand || null, status: "draft", catalog_id: catalogId,
-        })).filter((p: any) => p.name.length > 0);
+        // Try to find product blocks: split by pages, look for identifiable product sections
+        for (let pi = 0; pi < pageTexts.length; pi++) {
+          const pageText = pageTexts[pi];
+          // Find all prices on this page
+          const prices: number[] = [];
+          let m;
+          const combinedPriceRegex = /(\d[\d.,]*)\s*€|€\s*(\d[\d.,]*)/g;
+          while ((m = combinedPriceRegex.exec(pageText)) !== null) {
+            const val = parseNum(m[1] || m[2]);
+            if (val > 0) prices.push(val);
+          }
+
+          // Extract uppercase words sequences as potential product names
+          const nameMatches = pageText.match(/[A-Z][A-Z0-9&\-\s]{3,30}(?=[^a-z])/g) || [];
+          const potentialNames = nameMatches
+            .map(n => n.trim())
+            .filter(n => n.length > 3 && !/^\d+$/.test(n) && !/^(THE|AND|FOR|WITH|FROM)$/i.test(n));
+
+          // If we found at least a name, create a product entry
+          if (potentialNames.length > 0) {
+            const mainName = potentialNames[0];
+            // Check if we already have this name
+            const exists = productsToInsert.some(p => String(p.name).toLowerCase() === mainName.toLowerCase());
+            if (!exists) {
+              // Use first price as cost, second as selling price (common in catalogs)
+              const cost = prices.length > 0 ? prices[0] : 0;
+              const price = prices.length > 1 ? prices[prices.length - 1] : cost;
+
+              productsToInsert.push({
+                user_id: user.id,
+                name: mainName,
+                description: pageText.substring(0, 500),
+                sku: null, cost, price, stock: 0,
+                brand: null, status: "draft" as const,
+                catalog_id: catalogId,
+              });
+            }
+          } else if (prices.length > 0 && pageText.length > 20) {
+            // No clear name found but has prices — use first meaningful text chunk as name
+            const firstChunk = pageText.substring(0, 80).replace(/\s+/g, " ").trim();
+            if (firstChunk.length > 5) {
+              productsToInsert.push({
+                user_id: user.id,
+                name: firstChunk,
+                description: pageText.substring(0, 500),
+                sku: null, cost: prices[0], price: prices[prices.length - 1] || prices[0],
+                stock: 0, brand: null, status: "draft" as const,
+                catalog_id: catalogId,
+              });
+            }
+          }
+        }
       } else {
         throw new Error("Formato não suportado para extração. Use Excel, CSV ou PDF.");
       }

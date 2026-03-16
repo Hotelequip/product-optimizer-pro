@@ -172,18 +172,24 @@ Deno.serve(async (req) => {
         const toUpdate: any[] = [];
 
         for (const p of batch) {
+          const normalizedStatus = String(p.status ?? '').trim().toLowerCase();
+          const publishStatuses = new Set(['', 'active', 'publish', 'published', 'publicado', '1', 'true']);
+          const wooStatus = publishStatuses.has(normalizedStatus) ? 'publish' : 'draft';
+
           const product: any = {
             name: p.optimized_title || p.seo_title || p.name,
             description: p.description || '',
             short_description: p.short_description || '',
             regular_price: String(p.price || 0),
             sku: p.sku || '',
-            stock_quantity: p.stock || 0,
+            stock_quantity: Number(p.stock ?? 0),
             manage_stock: true,
-            status: p.status === 'active' ? 'publish' : 'draft',
-            slug: p.slug || '',
+            status: wooStatus,
             images: p.image_url ? [{ src: p.image_url }] : [],
           };
+
+          const slug = String(p.slug ?? '').trim();
+          if (slug) product.slug = slug;
 
           // Category
           const catName = p.category_name;
@@ -191,14 +197,7 @@ Deno.serve(async (req) => {
             product.categories = [{ id: categoryMap.get(catName) }];
           }
 
-          // Brand as product attribute
-          if (p.brand) {
-            product.attributes = [
-              { name: 'Marca', visible: true, options: [p.brand] },
-            ];
-          }
-
-          // EAN/GTIN + meta_description as meta_data
+          // EAN/GTIN + SEO + brand as meta_data
           const metaData: any[] = [];
           if (p.ean) {
             metaData.push({ key: '_global_unique_id', value: p.ean });
@@ -207,6 +206,16 @@ Deno.serve(async (req) => {
           if (p.meta_description) {
             metaData.push({ key: '_yoast_wpseo_metadesc', value: p.meta_description });
           }
+
+          const brand = String(p.brand ?? '').trim();
+          if (brand) {
+            product.attributes = [
+              { name: 'Marca Do Produto', visible: true, variation: false, options: [brand] },
+            ];
+            metaData.push({ key: 'marca_do_produto', value: brand });
+            metaData.push({ key: '_brand', value: brand });
+          }
+
           if (metaData.length > 0) product.meta_data = metaData;
 
           // Tags

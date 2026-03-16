@@ -128,6 +128,27 @@ Deno.serve(async (req) => {
         return null;
       }
 
+      // Pre-fetch existing WooCommerce products to match by SKU
+      const existingWooProducts = new Map<string, number>(); // sku -> woo id
+      try {
+        let prodPage = 1;
+        let hasMoreProds = true;
+        while (hasMoreProds) {
+          const prodRes = await fetch(`${baseUrl}/wp-json/wc/v3/products?per_page=100&page=${prodPage}`, {
+            headers: { 'Authorization': `Basic ${encodedCredentials}`, 'Content-Type': 'application/json' },
+          });
+          if (prodRes.ok) {
+            const prods = await prodRes.json();
+            for (const wp of prods) {
+              if (wp.sku) existingWooProducts.set(wp.sku, wp.id);
+            }
+            hasMoreProds = prods.length === 100;
+            prodPage++;
+          } else { hasMoreProds = false; }
+          if (prodPage > 10) break;
+        }
+      } catch (e) { console.error('Error fetching existing WooCommerce products:', e); }
+
       for (let i = 0; i < products.length; i += BATCH_SIZE) {
         const batch = products.slice(i, i + BATCH_SIZE);
 
@@ -141,7 +162,10 @@ Deno.serve(async (req) => {
           }
         }
 
-        const wooProducts = batch.map((p: any) => {
+        const toCreate: any[] = [];
+        const toUpdate: any[] = [];
+
+        for (const p of batch) {
           const product: any = {
             name: p.optimized_title || p.seo_title || p.name,
             description: p.description || '',
@@ -168,29 +192,35 @@ Deno.serve(async (req) => {
             ];
           }
 
-          // EAN/GTIN as meta_data
+          // EAN/GTIN + meta_description as meta_data
+          const metaData: any[] = [];
           if (p.ean) {
-            product.meta_data = [
-              { key: '_global_unique_id', value: p.ean },
-              { key: '_barcode', value: p.ean },
-            ];
+            metaData.push({ key: '_global_unique_id', value: p.ean });
+            metaData.push({ key: '_barcode', value: p.ean });
           }
+          if (p.meta_description) {
+            metaData.push({ key: '_yoast_wpseo_metadesc', value: p.meta_description });
+          }
+          if (metaData.length > 0) product.meta_data = metaData;
 
           // Tags
           if (p.tags && Array.isArray(p.tags) && p.tags.length > 0) {
             product.tags = p.tags.map((t: string) => ({ name: t }));
           }
 
-          // Meta description as Yoast SEO meta
-          if (p.meta_description) {
-            product.meta_data = [
-              ...(product.meta_data || []),
-              { key: '_yoast_wpseo_metadesc', value: p.meta_description },
-            ];
+          // Check if product exists in WooCommerce by SKU
+          const wooId = p.sku ? existingWooProducts.get(p.sku) : null;
+          if (wooId) {
+            product.id = wooId;
+            toUpdate.push(product);
+          } else {
+            toCreate.push(product);
           }
+        }
 
-          return product;
-        });
+        const batchBody: any = {};
+        if (toCreate.length > 0) batchBody.create = toCreate;
+        if (toUpdate.length > 0) batchBody.update = toUpdate;
 
         const response = await fetch(`${baseUrl}/wp-json/wc/v3/products/batch`, {
           method: 'POST',
@@ -198,7 +228,7 @@ Deno.serve(async (req) => {
             'Authorization': `Basic ${encodedCredentials}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ create: wooProducts }),
+          body: JSON.stringify(batchBody),
         });
 
         if (!response.ok) {
@@ -207,7 +237,13 @@ Deno.serve(async (req) => {
           results.push({ batch: i / BATCH_SIZE + 1, error: `Status ${response.status}` });
         } else {
           const data = await response.json();
-          results.push({ batch: i / BATCH_SIZE + 1, created: data.create?.length || 0 });
+          results.push({
+            batch: i / BATCH_SIZE + 1,
+            created: data.create?.length || 0,
+            updated: data.update?.length || 0,
+          });
+        }
+      }
         }
       }
 

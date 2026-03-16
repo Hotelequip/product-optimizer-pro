@@ -329,6 +329,8 @@ export default function Catalog() {
     const headerHints = [
       "description", "descricao", "designacao", "name", "nome", "ref", "referencia", "sku", "codigo",
       "tarif", "cost", "custo", "price", "preco", "pvp", "stock", "quantidade", "qty",
+      "image", "imagem", "imagens", "foto", "photo", "thumbnail",
+      "brand", "marca", "sale price", "regular price", "ean", "categories", "categoria",
     ];
 
     let bestIndex = 0;

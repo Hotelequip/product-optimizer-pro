@@ -2114,9 +2114,14 @@ function ImageGalleryTab({ products }: { products: Product[] }) {
             className="border rounded-lg p-3 text-center space-y-2 hover:shadow-md transition-shadow cursor-pointer group relative"
             onClick={() => setSelectedProduct(product)}
           >
-            {product.image_url ? (
+            {getFirstImageUrl(product.image_url) ? (
               <div className="relative">
-                <img src={product.image_url} alt={product.name} className="w-full h-28 object-contain rounded" />
+                <img src={getFirstImageUrl(product.image_url)!} alt={product.name} className="w-full h-28 object-contain rounded" />
+                {getAllImageUrls(product.image_url).length > 1 && (
+                  <span className="absolute top-1 right-1 bg-foreground/70 text-background text-[10px] px-1.5 py-0.5 rounded-full">
+                    +{getAllImageUrls(product.image_url).length - 1}
+                  </span>
+                )}
                 <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/10 rounded transition-colors flex items-center justify-center">
                   <ZoomIn className="h-6 w-6 text-background opacity-0 group-hover:opacity-80 transition-opacity" />
                 </div>

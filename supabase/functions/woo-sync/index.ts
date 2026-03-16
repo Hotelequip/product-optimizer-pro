@@ -173,8 +173,8 @@ Deno.serve(async (req) => {
 
         for (const p of batch) {
           const normalizedStatus = String(p.status ?? '').trim().toLowerCase();
-          const publishStatuses = new Set(['', 'active', 'publish', 'published', 'publicado', '1', 'true']);
-          const wooStatus = publishStatuses.has(normalizedStatus) ? 'publish' : 'draft';
+          const nonPublishStatuses = new Set(['inactive', 'disabled', '0', 'false']);
+          const wooStatus = nonPublishStatuses.has(normalizedStatus) ? 'draft' : 'publish';
 
           const product: any = {
             name: p.optimized_title || p.seo_title || p.name,

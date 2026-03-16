@@ -2147,18 +2147,38 @@ function ImageGalleryTab({ products }: { products: Product[] }) {
           {selectedProduct && (
             <div className="space-y-4">
               <div className="flex items-center justify-center bg-muted/30 rounded-lg p-4 min-h-[300px]">
-                {selectedProduct.image_url ? (
-                  <img
-                    src={selectedProduct.image_url}
-                    alt={selectedProduct.name}
-                    className="max-w-full max-h-[400px] object-contain rounded"
-                  />
+                {getFirstImageUrl(selectedProduct.image_url) ? (
+                  <>
+                    <img
+                      src={getFirstImageUrl(selectedProduct.image_url)!}
+                      alt={selectedProduct.name}
+                      className="max-w-full max-h-[400px] object-contain rounded"
+                    />
+                  </>
                 ) : (
                   <div className="text-center text-muted-foreground space-y-2">
                     <ImageIcon className="h-16 w-16 mx-auto" />
                     <p>Este produto não tem imagem</p>
                   </div>
                 )}
+              </div>
+              {/* Show all images gallery */}
+              {getAllImageUrls(selectedProduct.image_url).length > 1 && (
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {getAllImageUrls(selectedProduct.image_url).map((url, idx) => (
+                    <img
+                      key={idx}
+                      src={url}
+                      alt={`${selectedProduct.name} ${idx + 1}`}
+                      className="h-20 w-20 object-contain rounded border cursor-pointer hover:border-primary transition-colors flex-shrink-0"
+                      onClick={() => {
+                        // Update main view with this image
+                        setSelectedProduct({ ...selectedProduct, image_url: url });
+                      }}
+                    />
+                  ))}
+                </div>
+              )
               </div>
 
               {selectedProduct.sku && (

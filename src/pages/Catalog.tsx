@@ -1393,6 +1393,7 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [extractingFileId, setExtractingFileId] = useState<string | null>(null);
+  const [syncingFileId, setSyncingFileId] = useState<string | null>(null);
 
   const catalogId = selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized" ? selectedCatalogId : null;
 

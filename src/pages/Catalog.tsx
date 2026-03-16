@@ -1487,19 +1487,27 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
             const vals = lines[i].split(delimiter).map(v => v.trim().replace(/^"|"$/g, ""));
             const row: Record<string, string> = {};
             headers.forEach((h, idx) => { row[h] = vals[idx] || ""; });
-            const name = findVal(row, ["description","descricao","name","nome","titulo","title","produto","designacao"]).trim();
+            const name = findField(row, "name").trim();
             if (!name) continue;
+            const regularPrice = parseNum(findField(row, "regular_price"));
+            const salePrice = parseNum(findField(row, "sale_price"));
             productsToInsert.push({
-              user_id: user.id, name, description: findVal(row, ["description long","descricao longa","long description"]) || null,
-              short_description: findVal(row, ["short description","descricao curta","short_description"]) || null,
-              sku: findVal(row, ["ref","sku","referencia","codigo","code","cod"]) || null,
-              ean: findVal(row, ["ean","gtin","barcode","codigo barras"]) || null,
-              cost: parseNum(findVal(row, ["cost","custo","tarif","preco custo","net","euro"])),
-              price: parseNum(findVal(row, ["price","preco","pvp","sell","venda","sale price","sale_price","regular price","regular_price"])),
-              stock: Math.max(0, Math.trunc(parseNum(findVal(row, ["stock","estoque","qty","quantidade"])))),
-              brand: findVal(row, ["brand","marca"]) || null,
-              image_url: findVal(row, ["image url","image_url","imagens","imagem","image","images","foto","photo","thumbnail"]) || null,
-              supplier_url: findVal(row, ["supplier_url","supplier url","fornecedor_url","fornecedor url","link fornecedor"]) || null,
+              user_id: user.id, name,
+              description: findField(row, "description") || null,
+              short_description: findField(row, "short_description") || null,
+              sku: findField(row, "sku") || null,
+              ean: findField(row, "ean") || null,
+              cost: parseNum(findField(row, "cost")),
+              price: regularPrice || salePrice,
+              stock: Math.max(0, Math.trunc(parseNum(findField(row, "stock")))),
+              brand: findField(row, "brand") || null,
+              image_url: findField(row, "image_url") || null,
+              supplier_url: findField(row, "supplier_url") || null,
+              product_type: findField(row, "type")?.toLowerCase().includes("variable") ? "variable" : "simple",
+              seo_title: findField(row, "meta_title") || null,
+              meta_description: findField(row, "meta_description") || null,
+              slug: findField(row, "slug") || null,
+              tags: findField(row, "tags") ? findField(row, "tags").split(",").map((t: string) => t.trim()).filter(Boolean) : null,
               status: "draft", catalog_id: catalogId,
             });
           }
@@ -1515,19 +1523,29 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
             for (const r of jsonData) {
               const row: Record<string, string> = {};
               Object.keys(r).forEach(k => { row[String(k).trim()] = String(r[k] ?? "").trim(); });
-              const directName = findVal(row, ["description","descricao","name","nome","titulo","title","produto","designacao"]);
+              const directName = findField(row, "name");
               const fallbackName = Object.values(row).find(v => { const val = String(v || "").trim(); return val.length > 2 && /[a-zA-ZÀ-ÿ]/.test(val) && !/^\d+$/.test(val); }) || "";
               const name = (directName || fallbackName).trim();
               if (!name) continue;
+              const regularPrice = parseNum(findField(row, "regular_price"));
+              const salePrice = parseNum(findField(row, "sale_price"));
               productsToInsert.push({
-                user_id: user.id, name, description: null,
-                sku: findVal(row, ["ref","sku","referencia","codigo","code","cod"]) || null,
-                cost: parseNum(findVal(row, ["cost","custo","tarif","preco custo","net","euro"])),
-                price: parseNum(findVal(row, ["price","preco","pvp","sell","venda","sale price","sale_price","regular price","regular_price"])),
-                stock: Math.max(0, Math.trunc(parseNum(findVal(row, ["stock","estoque","qty","quantidade","std","units"])))),
-                brand: findVal(row, ["brand","marca"]) || null,
-                image_url: findVal(row, ["image url","image_url","imagens","imagem","image","images","foto","photo","thumbnail"]) || null,
-                supplier_url: findVal(row, ["supplier_url","url","fornecedor_url","supplier url","link"]) || null,
+                user_id: user.id, name,
+                description: findField(row, "description") || null,
+                short_description: findField(row, "short_description") || null,
+                sku: findField(row, "sku") || null,
+                ean: findField(row, "ean") || null,
+                cost: parseNum(findField(row, "cost")),
+                price: regularPrice || salePrice,
+                stock: Math.max(0, Math.trunc(parseNum(findField(row, "stock")))),
+                brand: findField(row, "brand") || null,
+                image_url: findField(row, "image_url") || null,
+                supplier_url: findField(row, "supplier_url") || null,
+                product_type: findField(row, "type")?.toLowerCase().includes("variable") ? "variable" : "simple",
+                seo_title: findField(row, "meta_title") || null,
+                meta_description: findField(row, "meta_description") || null,
+                slug: findField(row, "slug") || null,
+                tags: findField(row, "tags") ? findField(row, "tags").split(",").map((t: string) => t.trim()).filter(Boolean) : null,
                 status: "draft", catalog_id: catalogId,
               });
             }

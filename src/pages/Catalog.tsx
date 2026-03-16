@@ -1384,10 +1384,165 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
   const deleteFile = useDeleteCatalogFile();
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [extractingFileId, setExtractingFileId] = useState<string | null>(null);
 
   const catalogId = selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized" ? selectedCatalogId : null;
+
+  const normalizeHeader = (h: unknown) =>
+    String(h || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+
+  const parseNum = (val: unknown): number => {
+    if (val === null || val === undefined || val === "") return 0;
+    if (typeof val === "number") return val;
+    let s = String(val).replace(/\s/g, "").replace(/[R$€]/g, "");
+    const lastDot = s.lastIndexOf(".");
+    const lastComma = s.lastIndexOf(",");
+    if (lastComma > lastDot) s = s.replace(/\./g, "").replace(",", ".");
+    else if (lastDot > lastComma) s = s.replace(/,/g, "");
+    return parseFloat(s) || 0;
+  };
+
+  const findVal = (row: Record<string, string>, keys: string[]): string => {
+    const normalizedKeys = keys.map(normalizeHeader);
+    for (const rk of Object.keys(row)) {
+      if (normalizedKeys.some((k) => normalizeHeader(rk).includes(k))) return row[rk];
+    }
+    return "";
+  };
+
+  const detectHeaderRowIndex = (rowsMatrix: unknown[][]) => {
+    const headerHints = ["description","descricao","designacao","name","nome","ref","referencia","sku","tarif","cost","custo","price","preco","pvp","stock","quantidade","qty"];
+    let bestIndex = 0, bestScore = -1;
+    for (let i = 0; i < Math.min(40, rowsMatrix.length); i++) {
+      const cells = ((rowsMatrix[i] || []) as unknown[]).map(c => normalizeHeader(c)).filter(Boolean);
+      if (cells.length < 2) continue;
+      const score = cells.reduce((acc: number, cell: string) => acc + (headerHints.some(h => cell.includes(h)) ? 3 : /[a-zA-ZÀ-ÿ]/.test(cell) ? 1 : 0), 0);
+      if (score > bestScore) { bestScore = score; bestIndex = i; }
+    }
+    return bestIndex;
+  };
+
+  const extractProductsFromFile = async (file: { id: string; file_name: string; file_url: string; file_type: string }) => {
+    if (!user) return;
+    setExtractingFileId(file.id);
+    try {
+      const response = await fetch(file.file_url);
+      if (!response.ok) throw new Error("Não foi possível descarregar o ficheiro.");
+      const blob = await response.blob();
+      const ext = file.file_name.split(".").pop()?.toLowerCase();
+
+      let productsToInsert: Array<Record<string, unknown>> = [];
+
+      if (ext === "xlsx" || ext === "xls" || ext === "csv") {
+        if (ext === "csv") {
+          const text = await blob.text();
+          const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          if (lines.length < 2) throw new Error("CSV sem dados suficientes.");
+          const delimiter = (lines[0].match(/;/g)?.length ?? 0) > (lines[0].match(/,/g)?.length ?? 0) ? ";" : ",";
+          const headers = lines[0].split(delimiter).map(h => h.trim().replace(/^"|"$/g, ""));
+          for (let i = 1; i < lines.length; i++) {
+            const vals = lines[i].split(delimiter).map(v => v.trim().replace(/^"|"$/g, ""));
+            const row: Record<string, string> = {};
+            headers.forEach((h, idx) => { row[h] = vals[idx] || ""; });
+            const name = findVal(row, ["description","descricao","name","nome","titulo","title","produto","designacao"]).trim();
+            if (!name) continue;
+            productsToInsert.push({
+              user_id: user.id, name, description: null,
+              sku: findVal(row, ["ref","sku","referencia","codigo","code","cod"]) || null,
+              cost: parseNum(findVal(row, ["cost","custo","tarif","preco custo","net","euro"])),
+              price: parseNum(findVal(row, ["price","preco","pvp","sell","venda"])),
+              stock: Math.max(0, Math.trunc(parseNum(findVal(row, ["stock","estoque","qty","quantidade"])))),
+              brand: findVal(row, ["brand","marca"]) || null, status: "draft", catalog_id: catalogId,
+            });
+          }
+        } else {
+          const XLSX = await import("xlsx");
+          const buffer = await blob.arrayBuffer();
+          const wb = XLSX.read(buffer, { type: "array" });
+          for (const sheetName of wb.SheetNames) {
+            const ws = wb.Sheets[sheetName];
+            const allRows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "" });
+            const headerRowIdx = detectHeaderRowIndex(allRows as unknown[][]);
+            const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "", range: headerRowIdx });
+            for (const r of jsonData) {
+              const row: Record<string, string> = {};
+              Object.keys(r).forEach(k => { row[String(k).trim()] = String(r[k] ?? "").trim(); });
+              const directName = findVal(row, ["description","descricao","name","nome","titulo","title","produto","designacao"]);
+              const fallbackName = Object.values(row).find(v => { const val = String(v || "").trim(); return val.length > 2 && /[a-zA-ZÀ-ÿ]/.test(val) && !/^\d+$/.test(val); }) || "";
+              const name = (directName || fallbackName).trim();
+              if (!name) continue;
+              productsToInsert.push({
+                user_id: user.id, name, description: null,
+                sku: findVal(row, ["ref","sku","referencia","codigo","code","cod"]) || null,
+                cost: parseNum(findVal(row, ["cost","custo","tarif","preco custo","net","euro"])),
+                price: parseNum(findVal(row, ["price","preco","pvp","sell","venda"])),
+                stock: Math.max(0, Math.trunc(parseNum(findVal(row, ["stock","estoque","qty","quantidade","std","units"])))),
+                brand: findVal(row, ["brand","marca"]) || null, status: "draft", catalog_id: catalogId,
+              });
+            }
+          }
+        }
+      } else if (ext === "pdf") {
+        const pdfjsLib = await import("pdfjs-dist");
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
+        const arrayBuffer = await blob.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let fullText = "";
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          fullText += content.items.map((item: any) => item.str).join(" ") + "\n";
+        }
+        if (!fullText.trim()) throw new Error("PDF vazio — sem texto extraível.");
+
+        const { data, error } = await supabase.functions.invoke("extract-products", { body: { text: fullText } });
+        if (error) throw error;
+        if (!data?.success || !data.products?.length) throw new Error("Nenhum produto identificado no PDF.");
+
+        productsToInsert = data.products.map((p: any) => ({
+          user_id: user.id, name: String(p?.name || "").trim(),
+          description: p?.description || null, sku: p?.sku || null,
+          cost: parseNum(p?.cost), price: parseNum(p?.price),
+          stock: Math.max(0, Math.trunc(parseNum(p?.stock))),
+          brand: p?.brand || null, status: "draft", catalog_id: catalogId,
+        })).filter((p: any) => p.name.length > 0);
+      } else {
+        throw new Error("Formato não suportado para extração. Use Excel, CSV ou PDF.");
+      }
+
+      // Dedup
+      const deduped: Array<Record<string, unknown>> = [];
+      const seen = new Set<string>();
+      for (const p of productsToInsert) {
+        const key = `${String(p.sku ?? "").toLowerCase()}|${String(p.name ?? "").toLowerCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(p);
+      }
+
+      if (deduped.length === 0) throw new Error("Nenhum produto encontrado no ficheiro.");
+
+      // Insert in batches
+      const BATCH_SIZE = 100;
+      let inserted = 0;
+      for (let i = 0; i < deduped.length; i += BATCH_SIZE) {
+        const chunk = deduped.slice(i, i + BATCH_SIZE);
+        const { data: result, error: insertErr } = await supabase.from("products").insert(chunk as any).select("id");
+        if (insertErr) throw new Error(insertErr.message);
+        inserted += result?.length ?? chunk.length;
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ["products"] });
+      toast({ title: `${inserted} produtos extraídos de "${file.file_name}"!` });
+    } catch (e: any) {
+      toast({ title: "Erro na extração", description: e.message, variant: "destructive" });
+    } finally {
+      setExtractingFileId(null);
+    }
+  };
 
   const uploadFile = async (file: globalThis.File) => {
     if (!user) {
@@ -1497,6 +1652,19 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
                       {formatSize(f.file_size)} · {new Date(f.created_at).toLocaleDateString("pt-PT")}
                     </p>
                   </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1"
+                    disabled={extractingFileId === f.id || f.file_type === "other"}
+                    onClick={(e) => { e.stopPropagation(); extractProductsFromFile(f); }}
+                  >
+                    {extractingFileId === f.id ? (
+                      <><Loader2 className="h-3 w-3 animate-spin" />Extraindo...</>
+                    ) : (
+                      <><Sparkles className="h-3 w-3" />Extrair Produtos</>
+                    )}
+                  </Button>
                   <a href={f.file_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
                     <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
                       <Download className="h-3.5 w-3.5" />

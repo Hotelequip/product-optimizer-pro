@@ -2078,18 +2078,6 @@ function InlineProductForm({
 
 
 
-// Helper: extract first URL from potentially comma-separated image_url
-function getFirstImageUrl(imageUrl: string | null | undefined): string | null {
-  if (!imageUrl) return null;
-  const first = imageUrl.split(",")[0].trim();
-  return first.startsWith("http") ? first : null;
-}
-
-// Helper: extract all URLs from comma-separated image_url
-function getAllImageUrls(imageUrl: string | null | undefined): string[] {
-  if (!imageUrl) return [];
-  return imageUrl.split(",").map(u => u.trim()).filter(u => u.startsWith("http"));
-}
 
 function ImageGalleryTab({ products }: { products: Product[] }) {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);

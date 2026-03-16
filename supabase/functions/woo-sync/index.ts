@@ -89,19 +89,109 @@ Deno.serve(async (req) => {
       const results: any[] = [];
       const BATCH_SIZE = 50;
 
+      // Pre-fetch existing WooCommerce categories to map by name
+      let wooCategories: any[] = [];
+      try {
+        let catPage = 1;
+        let hasMoreCats = true;
+        while (hasMoreCats) {
+          const catRes = await fetch(`${baseUrl}/wp-json/wc/v3/products/categories?per_page=100&page=${catPage}`, {
+            headers: { 'Authorization': `Basic ${encodedCredentials}`, 'Content-Type': 'application/json' },
+          });
+          if (catRes.ok) {
+            const cats = await catRes.json();
+            wooCategories = wooCategories.concat(cats);
+            hasMoreCats = cats.length === 100;
+            catPage++;
+          } else { hasMoreCats = false; }
+          if (catPage > 5) break;
+        }
+      } catch (e) { console.error('Error fetching WooCommerce categories:', e); }
+
+      // Helper to get or create a WooCommerce category by name
+      async function getOrCreateCategory(name: string): Promise<number | null> {
+        if (!name) return null;
+        const existing = wooCategories.find((c: any) => c.name.toLowerCase() === name.toLowerCase());
+        if (existing) return existing.id;
+        try {
+          const res = await fetch(`${baseUrl}/wp-json/wc/v3/products/categories`, {
+            method: 'POST',
+            headers: { 'Authorization': `Basic ${encodedCredentials}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name }),
+          });
+          if (res.ok) {
+            const newCat = await res.json();
+            wooCategories.push(newCat);
+            return newCat.id;
+          }
+        } catch (e) { console.error('Error creating category:', e); }
+        return null;
+      }
+
       for (let i = 0; i < products.length; i += BATCH_SIZE) {
         const batch = products.slice(i, i + BATCH_SIZE);
-        const wooProducts = batch.map((p: any) => ({
-          name: p.name,
-          description: p.description || '',
-          regular_price: String(p.price || 0),
-          stock_quantity: p.stock || 0,
-          manage_stock: true,
-          status: p.status === 'active' ? 'publish' : 'draft',
-          images: p.image_url ? [{ src: p.image_url }] : [],
-        }));
 
-        // Use batch endpoint
+        // Resolve categories for this batch
+        const categoryMap = new Map<string, number>();
+        for (const p of batch) {
+          const catName = p.category_name;
+          if (catName && !categoryMap.has(catName)) {
+            const catId = await getOrCreateCategory(catName);
+            if (catId) categoryMap.set(catName, catId);
+          }
+        }
+
+        const wooProducts = batch.map((p: any) => {
+          const product: any = {
+            name: p.optimized_title || p.seo_title || p.name,
+            description: p.description || '',
+            short_description: p.short_description || '',
+            regular_price: String(p.price || 0),
+            sku: p.sku || '',
+            stock_quantity: p.stock || 0,
+            manage_stock: true,
+            status: p.status === 'active' ? 'publish' : 'draft',
+            slug: p.slug || '',
+            images: p.image_url ? [{ src: p.image_url }] : [],
+          };
+
+          // Category
+          const catName = p.category_name;
+          if (catName && categoryMap.has(catName)) {
+            product.categories = [{ id: categoryMap.get(catName) }];
+          }
+
+          // Brand as product attribute
+          if (p.brand) {
+            product.attributes = [
+              { name: 'Marca', visible: true, options: [p.brand] },
+            ];
+          }
+
+          // EAN/GTIN as meta_data
+          if (p.ean) {
+            product.meta_data = [
+              { key: '_global_unique_id', value: p.ean },
+              { key: '_barcode', value: p.ean },
+            ];
+          }
+
+          // Tags
+          if (p.tags && Array.isArray(p.tags) && p.tags.length > 0) {
+            product.tags = p.tags.map((t: string) => ({ name: t }));
+          }
+
+          // Meta description as Yoast SEO meta
+          if (p.meta_description) {
+            product.meta_data = [
+              ...(product.meta_data || []),
+              { key: '_yoast_wpseo_metadesc', value: p.meta_description },
+            ];
+          }
+
+          return product;
+        });
+
         const response = await fetch(`${baseUrl}/wp-json/wc/v3/products/batch`, {
           method: 'POST',
           headers: {

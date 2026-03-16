@@ -223,8 +223,10 @@ Deno.serve(async (req) => {
             product.tags = p.tags.map((t: string) => ({ name: t }));
           }
 
-          // Check if product exists in WooCommerce by SKU
-          const wooId = p.sku ? existingWooProducts.get(p.sku) : null;
+          // Check if product exists in WooCommerce by SKU/slug
+          const skuKey = normalizeKey(p.sku);
+          const slugKey = normalizeKey(p.slug);
+          const wooId = (skuKey && existingWooProductsBySku.get(skuKey)) || (slugKey && existingWooProductsBySlug.get(slugKey)) || null;
           if (wooId) {
             product.id = wooId;
             toUpdate.push(product);

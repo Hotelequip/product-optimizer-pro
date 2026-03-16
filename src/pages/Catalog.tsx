@@ -1315,7 +1315,23 @@ export default function Catalog() {
         </TabsContent>
 
         <TabsContent value="woo">
-          <WooCommerceSync />
+          <Card>
+            <CardContent className="pt-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold">Exportar para WooCommerce</h3>
+                  <p className="text-sm text-muted-foreground">Gera um ficheiro Excel com todas as colunas do formato WooCommerce, incluindo SEO Rank Math e galeria de imagens.</p>
+                </div>
+                <Button onClick={exportWooCommerceExcel} className="gap-2" disabled={filteredProducts.length === 0}>
+                  <Download className="h-4 w-4" />
+                  Exportar Excel ({filteredProducts.length})
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+          <div className="mt-4">
+            <WooCommerceSync />
+          </div>
         </TabsContent>
       </Tabs>
 

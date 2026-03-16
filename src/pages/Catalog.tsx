@@ -1671,7 +1671,7 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
       for (const row of rows) {
         const sku = findVal(row, ["ref","sku","referencia","codigo","code","cod"]).trim();
         const name = findVal(row, ["description","descricao","name","nome","titulo","title","produto","designacao"]).trim();
-        const imageUrl = findVal(row, ["image url","image_url","imagens","imagem","image","images","foto","photo","thumbnail"]).trim();
+        const rawImageUrl = findVal(row, ["image url","image_url","imagens","imagem","image","images","foto","photo","thumbnail"]).trim();
         const supplierUrl = findVal(row, ["supplier_url","supplier url","fornecedor_url","fornecedor url","link fornecedor"]).trim();
         const ean = findVal(row, ["ean","gtin","barcode","codigo barras"]).trim();
         const brand = findVal(row, ["brand","marca"]).trim();
@@ -1680,9 +1680,17 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
         const match = (sku && bySkuMap.get(sku.toLowerCase())) || (name && byNameMap.get(name.toLowerCase()));
         if (!match) continue;
 
-        // Build update object with only non-empty fields that are currently missing
+        // Split multiple image URLs (comma or space separated)
+        const imageUrls = rawImageUrl
+          ? rawImageUrl.split(/,\s*/).map(u => u.trim()).filter(u => u.startsWith("http"))
+          : [];
+
+        const primaryImage = imageUrls[0] || null;
+        const extraImages = imageUrls.slice(1);
+
+        // Build update object
         const updates: Record<string, unknown> = {};
-        if (imageUrl && !match.image_url) updates.image_url = imageUrl;
+        if (primaryImage) updates.image_url = primaryImage;
         if (ean) updates.ean = ean;
         if (supplierUrl) updates.supplier_url = supplierUrl;
         if (brand) updates.brand = brand;
@@ -1690,6 +1698,26 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
         if (Object.keys(updates).length > 0) {
           await supabase.from("products").update(updates as any).eq("id", match.id);
           updated++;
+        }
+
+        // Insert extra images into product_images table
+        if (extraImages.length > 0) {
+          const imagesToInsert = extraImages.map((url, idx) => ({
+            product_id: match.id,
+            user_id: user.id,
+            url,
+            type: "original",
+            is_primary: false,
+          }));
+          // Also insert primary as product_images entry
+          imagesToInsert.unshift({
+            product_id: match.id,
+            user_id: user.id,
+            url: primaryImage!,
+            type: "original",
+            is_primary: true,
+          });
+          await supabase.from("product_images").insert(imagesToInsert as any);
         }
       }
 

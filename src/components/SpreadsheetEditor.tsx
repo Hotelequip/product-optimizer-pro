@@ -40,6 +40,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
   const deleteProduct = useDeleteProduct();
   const { data: catalogs = [] } = useCatalogs();
   const { data: categories = [] } = useCategories();
+  const { data: allVariations = [] } = useAllVariations();
   const { toast } = useToast();
   const [editingCell, setEditingCell] = useState<EditableCell | null>(null);
   const [editValue, setEditValue] = useState("");

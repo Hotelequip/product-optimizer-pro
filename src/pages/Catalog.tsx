@@ -1419,7 +1419,7 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
   };
 
   const detectHeaderRowIndex = (rowsMatrix: unknown[][]) => {
-    const headerHints = ["description","descricao","designacao","name","nome","ref","referencia","sku","tarif","cost","custo","price","preco","pvp","stock","quantidade","qty"];
+    const headerHints = ["description","descricao","designacao","name","nome","ref","referencia","sku","tarif","cost","custo","price","preco","pvp","stock","quantidade","qty","image","imagem","imagens","foto","brand","marca","ean","sale price","categories","categoria"];
     let bestIndex = 0, bestScore = -1;
     for (let i = 0; i < Math.min(40, rowsMatrix.length); i++) {
       const cells = ((rowsMatrix[i] || []) as unknown[]).map(c => normalizeHeader(c)).filter(Boolean);

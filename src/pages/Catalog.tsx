@@ -1702,6 +1702,7 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
     }
   };
 
+  const uploadFile = async (file: globalThis.File) => {
     if (!user) {
       toast({ title: "Sessão expirada", description: "Inicie sessão novamente para carregar ficheiros.", variant: "destructive" });
       return;

@@ -1722,6 +1722,7 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
       }
 
       await queryClient.invalidateQueries({ queryKey: ["products"] });
+      await queryClient.invalidateQueries({ queryKey: ["product_images"] });
       toast({ title: `${updated} produtos atualizados de "${file.file_name}"!` });
     } catch (e: any) {
       toast({ title: "Erro na sincronização", description: e.message, variant: "destructive" });

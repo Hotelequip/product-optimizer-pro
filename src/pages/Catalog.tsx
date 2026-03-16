@@ -117,8 +117,8 @@ function OptimizedProductsTab({ products }: { products: Product[] }) {
                   className="w-full flex items-center gap-3 p-3 text-left"
                   onClick={() => setExpandedId(isExpanded ? null : p.id)}
                 >
-                  {p.image_url ? (
-                    <img src={p.image_url} alt={p.name} className="h-12 w-12 rounded object-cover flex-shrink-0 border" />
+                  {getFirstImageUrl(p.image_url) ? (
+                    <img src={getFirstImageUrl(p.image_url)!} alt={p.name} className="h-12 w-12 rounded object-cover flex-shrink-0 border" />
                   ) : (
                     <div className="h-12 w-12 rounded bg-muted flex items-center justify-center flex-shrink-0">
                       <ImageIcon className="h-5 w-5 text-muted-foreground" />

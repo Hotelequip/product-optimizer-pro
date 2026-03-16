@@ -200,6 +200,117 @@ function OptimizedProductsTab({ products }: { products: Product[] }) {
   );
 }
 
+// ─── Module-level helpers (shared across all components in this file) ───
+
+const normalizeHeader = (h: unknown) =>
+  String(h || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+
+const parseNum = (val: unknown): number => {
+  if (val === null || val === undefined || val === "") return 0;
+  if (typeof val === "number") return val;
+  let s = String(val).replace(/\s/g, "").replace(/[R$€]/g, "");
+  const lastDot = s.lastIndexOf(".");
+  const lastComma = s.lastIndexOf(",");
+  if (lastComma > lastDot) s = s.replace(/\./g, "").replace(",", ".");
+  else if (lastDot > lastComma) s = s.replace(/,/g, "");
+  return parseFloat(s) || 0;
+};
+
+const FIELD_ALIASES: Record<string, string[]> = {
+  name: ["name","nome","title","titulo","designacao","description","descricao","product","produto","article","artigo","item","libelle","designation","woo:name"],
+  description: ["content","conteudo","long description","descricao longa","description long","description longue","full description","corpo","body","woo:description"],
+  short_description: ["short description","descricao curta","short_description","resumo","excerpt","intro","woo:short description"],
+  sku: ["ref","sku","referencia","codigo","code","cod","reference","article number","part number","modelo","model","product code","item number","woo:sku"],
+  ean: ["ean","gtin","barcode","codigo barras","upc","isbn","ean13","ean-13","codigo de barras"],
+  cost: ["cost","custo","tarif","preco custo","net","euro","unit cost","wholesale","compra","prix achat","purchase price","buying price","cost price"],
+  regular_price: ["regular price","regular_price","preco","pvp","price","sell","venda","retail","preco venda","prix","prix vente","woo:regular price"],
+  sale_price: ["sale price","sale_price","preco promocional","promo","promotional","prix promo","offer price","discount price","woo:sale price"],
+  stock: ["stock","estoque","qty","quantidade","inventory","units","std","quantity","disponivel","available","en stock"],
+  brand: ["brand","marca","fabricante","manufacturer","vendor","fornecedor"],
+  image_url: ["image","images","image url","image_url","imagens","imagem","foto","photo","thumbnail","picture","img","woo:images","gallery","galeria","image 1"],
+  supplier_url: ["supplier_url","supplier url","fornecedor_url","fornecedor url","link fornecedor","url","link","product url","external url","woo:external url"],
+  categories: ["categories","categorias","categoria","category","cat","woo:categories","product categories"],
+  tags: ["tags","etiquetas","palavras chave","keywords","woo:tags"],
+  weight: ["weight","peso","poids","woo:weight"],
+  dimensions: ["dimensions","dimensoes","tamanho","size"],
+  type: ["type","tipo","product type","woo:type"],
+  status_field: ["status","estado","state","woo:published"],
+  slug: ["slug","permalink","url amigavel"],
+  tax_status: ["tax status","tax_status","imposto","taxable","woo:tax status"],
+  tax_class: ["tax class","tax_class","classe imposto","woo:tax class"],
+  meta_title: ["seo title","meta title","rank math title","seo titulo","woo:meta: rank_math_title"],
+  meta_description: ["seo description","meta description","rank math description","seo descricao","woo:meta: rank_math_description"],
+  focus_keyword: ["focus keyword","keyword","palavra chave","rank math focus keyword","woo:meta: rank_math_focus_keyword"],
+};
+
+const findVal = (row: Record<string, string>, keys: string[]): string => {
+  const normalizedKeys = keys.map(normalizeHeader);
+  for (const rk of Object.keys(row)) {
+    const nh = normalizeHeader(rk);
+    if (normalizedKeys.some((k) => nh.includes(k))) return row[rk];
+  }
+  return "";
+};
+
+const findField = (row: Record<string, string>, field: string): string => {
+  return findVal(row, FIELD_ALIASES[field] || []);
+};
+
+const detectHeaderRowIndex = (rowsMatrix: unknown[][]) => {
+  const headerHints = [
+    "description","descricao","designacao","name","nome","ref","referencia","sku","codigo",
+    "tarif","cost","custo","price","preco","pvp","stock","quantidade","qty",
+    "image","imagem","imagens","foto","photo","thumbnail",
+    "brand","marca","sale price","regular price","ean","categories","categoria",
+  ];
+  let bestIndex = 0;
+  let bestScore = -1;
+  for (let i = 0; i < Math.min(40, rowsMatrix.length); i++) {
+    const row = (rowsMatrix[i] || []) as unknown[];
+    const cells = row.map((c) => normalizeHeader(c)).filter(Boolean);
+    if (cells.length < 2) continue;
+    const hintScore = cells.reduce((acc, cell) => {
+      const matchesHint = headerHints.some((hint) => cell.includes(hint));
+      return acc + (matchesHint ? 3 : /[a-zA-ZÀ-ÿ]/.test(cell) ? 1 : 0);
+    }, 0);
+    if (hintScore > bestScore) { bestScore = hintScore; bestIndex = i; }
+  }
+  if (bestScore > 0) return bestIndex;
+  for (let i = 0; i < Math.min(20, rowsMatrix.length); i++) {
+    const row = (rowsMatrix[i] || []) as unknown[];
+    const nonEmpty = row.filter((c) => String(c || "").trim().length > 0).length;
+    const hasText = row.some((c) => typeof c === "string" && c.trim().length > 1 && Number.isNaN(Number(c)));
+    if (nonEmpty >= 3 && hasText) return i;
+  }
+  return 0;
+};
+
+const parseCsvLine = (line: string, delimiter: string) => {
+  const values: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (char === delimiter && !inQuotes) { values.push(current.trim()); current = ""; }
+    else current += char;
+  }
+  values.push(current.trim());
+  return values;
+};
+
+const getAllImageUrls = (imageUrl?: string | null): string[] => {
+  if (!imageUrl) return [];
+  return imageUrl.split(/,\s*/).map(u => u.trim()).filter(u => u.startsWith("http"));
+};
+
+const getFirstImageUrl = (imageUrl?: string | null): string | null => {
+  const urls = getAllImageUrls(imageUrl);
+  return urls.length > 0 ? urls[0] : null;
+};
+
 export default function Catalog() {
   const { data: products = [], isLoading } = useProducts();
   const { data: categories = [] } = useCategories();
@@ -267,103 +378,7 @@ export default function Catalog() {
     if (selectedCatalogId === id) setSelectedCatalogId("all");
   };
 
-  // Helper: normalize header string (lowercase, remove diacritics, trim)
-  const normalizeHeader = (h: unknown) =>
-    String(h || "")
-      .trim()
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/\s+/g, " ");
-
-  // Helper: parse number with European format support (1.234,56 → 1234.56)
-  const parseNum = (val: unknown): number => {
-    if (val === null || val === undefined || val === "") return 0;
-    if (typeof val === "number") return val;
-    let s = String(val).replace(/\s/g, "").replace(/[R$€]/g, "");
-    const lastDot = s.lastIndexOf(".");
-    const lastComma = s.lastIndexOf(",");
-    if (lastComma > lastDot) s = s.replace(/\./g, "").replace(",", ".");
-    else if (lastDot > lastComma) s = s.replace(/,/g, "");
-    return parseFloat(s) || 0;
-  };
-
-  const parseCsvLine = (line: string, delimiter: string) => {
-    const values: string[] = [];
-    let current = "";
-    let inQuotes = false;
-
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      if (char === '"') {
-        if (inQuotes && line[i + 1] === '"') {
-          current += '"';
-          i++;
-        } else {
-          inQuotes = !inQuotes;
-        }
-      } else if (char === delimiter && !inQuotes) {
-        values.push(current.trim());
-        current = "";
-      } else {
-        current += char;
-      }
-    }
-
-    values.push(current.trim());
-    return values;
-  };
-
-  // Helper: find value from row using multiple possible keys
-  const findVal = (row: Record<string, string>, keys: string[]): string => {
-    const normalizedKeys = keys.map(normalizeHeader);
-    for (const rk of Object.keys(row)) {
-      const normalizedHeader = normalizeHeader(rk);
-      if (normalizedKeys.some((k) => normalizedHeader.includes(k))) {
-        return row[rk];
-      }
-    }
-    return "";
-  };
-
-  const detectHeaderRowIndex = (rowsMatrix: unknown[][]) => {
-    const headerHints = [
-      "description", "descricao", "designacao", "name", "nome", "ref", "referencia", "sku", "codigo",
-      "tarif", "cost", "custo", "price", "preco", "pvp", "stock", "quantidade", "qty",
-      "image", "imagem", "imagens", "foto", "photo", "thumbnail",
-      "brand", "marca", "sale price", "regular price", "ean", "categories", "categoria",
-    ];
-
-    let bestIndex = 0;
-    let bestScore = -1;
-
-    for (let i = 0; i < Math.min(40, rowsMatrix.length); i++) {
-      const row = (rowsMatrix[i] || []) as unknown[];
-      const cells = row.map((c) => normalizeHeader(c)).filter(Boolean);
-      if (cells.length < 2) continue;
-
-      const hintScore = cells.reduce((acc, cell) => {
-        const matchesHint = headerHints.some((hint) => cell.includes(hint));
-        return acc + (matchesHint ? 3 : /[a-zA-ZÀ-ÿ]/.test(cell) ? 1 : 0);
-      }, 0);
-
-      if (hintScore > bestScore) {
-        bestScore = hintScore;
-        bestIndex = i;
-      }
-    }
-
-    if (bestScore > 0) return bestIndex;
-
-    for (let i = 0; i < Math.min(20, rowsMatrix.length); i++) {
-      const row = (rowsMatrix[i] || []) as unknown[];
-      const nonEmpty = row.filter((c) => String(c || "").trim().length > 0).length;
-      const hasText = row.some((c) => typeof c === "string" && c.trim().length > 1 && Number.isNaN(Number(c)));
-      if (nonEmpty >= 3 && hasText) return i;
-    }
-
-    return 0;
-  };
+  // helpers are module-level (above)
 
   const buildSafeStoragePath = (file: File) => {
     const sanitizedName = file.name
@@ -933,7 +948,61 @@ export default function Catalog() {
       description: `${files.length} ficheiro(s) associado(s).`,
     });
 
+  };
 
+  // WooCommerce Excel Export
+  const exportWooCommerceExcel = async () => {
+    const XLSX = await import("xlsx");
+    const allImages = await supabase.from("product_images").select("*").eq("user_id", user!.id);
+    const imageMap = new Map<string, string[]>();
+    for (const img of (allImages.data || [])) {
+      const list = imageMap.get((img as any).product_id) || [];
+      list.push((img as any).url);
+      imageMap.set((img as any).product_id, list);
+    }
+
+    const cats = categories;
+    const wooRows = filteredProducts.map(p => {
+      const catName = cats.find(c => c.id === p.category_id)?.name || "";
+      const imgs = imageMap.get(p.id) || [];
+      const primaryImg = getFirstImageUrl(p.image_url);
+      const allImgs = primaryImg ? [primaryImg, ...imgs.filter(u => u !== primaryImg)] : imgs;
+
+      return {
+        "Type": p.product_type === "variable" ? "variable" : "simple",
+        "SKU": p.sku || "",
+        "Name": p.optimized_title || p.name || "",
+        "Published": p.status === "active" ? 1 : 0,
+        "Is featured?": 0,
+        "Visibility in catalog": "visible",
+        "Short description": p.short_description || "",
+        "Description": p.description || "",
+        "Tax status": "taxable",
+        "Tax class": "",
+        "In stock?": p.stock > 0 ? 1 : 0,
+        "Stock": p.stock,
+        "Regular price": p.price || "",
+        "Sale price": "",
+        "Categories": catName,
+        "Tags": (p.tags || []).join(", "),
+        "Images": allImgs.join(", "),
+        "External URL": p.supplier_url || "",
+        "Brand": p.brand || "",
+        "EAN": p.ean || "",
+        "SEO Title": p.seo_title || "",
+        "Meta Description": p.meta_description || "",
+        "Slug": p.slug || "",
+        "Meta: rank_math_title": p.seo_title || "",
+        "Meta: rank_math_description": p.meta_description || "",
+        "Meta: rank_math_focus_keyword": (p.tags || [])[0] || "",
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(wooRows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Products");
+    XLSX.writeFile(wb, `woocommerce-export-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    toast({ title: `${wooRows.length} produtos exportados para WooCommerce!` });
   };
 
   return (
@@ -1246,7 +1315,23 @@ export default function Catalog() {
         </TabsContent>
 
         <TabsContent value="woo">
-          <WooCommerceSync />
+          <Card>
+            <CardContent className="pt-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-semibold">Exportar para WooCommerce</h3>
+                  <p className="text-sm text-muted-foreground">Gera um ficheiro Excel com todas as colunas do formato WooCommerce, incluindo SEO Rank Math e galeria de imagens.</p>
+                </div>
+                <Button onClick={exportWooCommerceExcel} className="gap-2" disabled={filteredProducts.length === 0}>
+                  <Download className="h-4 w-4" />
+                  Exportar Excel ({filteredProducts.length})
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+          <div className="mt-4">
+            <WooCommerceSync />
+          </div>
         </TabsContent>
       </Tabs>
 
@@ -1454,19 +1539,27 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
             const vals = lines[i].split(delimiter).map(v => v.trim().replace(/^"|"$/g, ""));
             const row: Record<string, string> = {};
             headers.forEach((h, idx) => { row[h] = vals[idx] || ""; });
-            const name = findVal(row, ["description","descricao","name","nome","titulo","title","produto","designacao"]).trim();
+            const name = findField(row, "name").trim();
             if (!name) continue;
+            const regularPrice = parseNum(findField(row, "regular_price"));
+            const salePrice = parseNum(findField(row, "sale_price"));
             productsToInsert.push({
-              user_id: user.id, name, description: findVal(row, ["description long","descricao longa","long description"]) || null,
-              short_description: findVal(row, ["short description","descricao curta","short_description"]) || null,
-              sku: findVal(row, ["ref","sku","referencia","codigo","code","cod"]) || null,
-              ean: findVal(row, ["ean","gtin","barcode","codigo barras"]) || null,
-              cost: parseNum(findVal(row, ["cost","custo","tarif","preco custo","net","euro"])),
-              price: parseNum(findVal(row, ["price","preco","pvp","sell","venda","sale price","sale_price","regular price","regular_price"])),
-              stock: Math.max(0, Math.trunc(parseNum(findVal(row, ["stock","estoque","qty","quantidade"])))),
-              brand: findVal(row, ["brand","marca"]) || null,
-              image_url: findVal(row, ["image url","image_url","imagens","imagem","image","images","foto","photo","thumbnail"]) || null,
-              supplier_url: findVal(row, ["supplier_url","supplier url","fornecedor_url","fornecedor url","link fornecedor"]) || null,
+              user_id: user.id, name,
+              description: findField(row, "description") || null,
+              short_description: findField(row, "short_description") || null,
+              sku: findField(row, "sku") || null,
+              ean: findField(row, "ean") || null,
+              cost: parseNum(findField(row, "cost")),
+              price: regularPrice || salePrice,
+              stock: Math.max(0, Math.trunc(parseNum(findField(row, "stock")))),
+              brand: findField(row, "brand") || null,
+              image_url: findField(row, "image_url") || null,
+              supplier_url: findField(row, "supplier_url") || null,
+              product_type: findField(row, "type")?.toLowerCase().includes("variable") ? "variable" : "simple",
+              seo_title: findField(row, "meta_title") || null,
+              meta_description: findField(row, "meta_description") || null,
+              slug: findField(row, "slug") || null,
+              tags: findField(row, "tags") ? findField(row, "tags").split(",").map((t: string) => t.trim()).filter(Boolean) : null,
               status: "draft", catalog_id: catalogId,
             });
           }
@@ -1482,19 +1575,29 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
             for (const r of jsonData) {
               const row: Record<string, string> = {};
               Object.keys(r).forEach(k => { row[String(k).trim()] = String(r[k] ?? "").trim(); });
-              const directName = findVal(row, ["description","descricao","name","nome","titulo","title","produto","designacao"]);
+              const directName = findField(row, "name");
               const fallbackName = Object.values(row).find(v => { const val = String(v || "").trim(); return val.length > 2 && /[a-zA-ZÀ-ÿ]/.test(val) && !/^\d+$/.test(val); }) || "";
               const name = (directName || fallbackName).trim();
               if (!name) continue;
+              const regularPrice = parseNum(findField(row, "regular_price"));
+              const salePrice = parseNum(findField(row, "sale_price"));
               productsToInsert.push({
-                user_id: user.id, name, description: null,
-                sku: findVal(row, ["ref","sku","referencia","codigo","code","cod"]) || null,
-                cost: parseNum(findVal(row, ["cost","custo","tarif","preco custo","net","euro"])),
-                price: parseNum(findVal(row, ["price","preco","pvp","sell","venda","sale price","sale_price","regular price","regular_price"])),
-                stock: Math.max(0, Math.trunc(parseNum(findVal(row, ["stock","estoque","qty","quantidade","std","units"])))),
-                brand: findVal(row, ["brand","marca"]) || null,
-                image_url: findVal(row, ["image url","image_url","imagens","imagem","image","images","foto","photo","thumbnail"]) || null,
-                supplier_url: findVal(row, ["supplier_url","url","fornecedor_url","supplier url","link"]) || null,
+                user_id: user.id, name,
+                description: findField(row, "description") || null,
+                short_description: findField(row, "short_description") || null,
+                sku: findField(row, "sku") || null,
+                ean: findField(row, "ean") || null,
+                cost: parseNum(findField(row, "cost")),
+                price: regularPrice || salePrice,
+                stock: Math.max(0, Math.trunc(parseNum(findField(row, "stock")))),
+                brand: findField(row, "brand") || null,
+                image_url: findField(row, "image_url") || null,
+                supplier_url: findField(row, "supplier_url") || null,
+                product_type: findField(row, "type")?.toLowerCase().includes("variable") ? "variable" : "simple",
+                seo_title: findField(row, "meta_title") || null,
+                meta_description: findField(row, "meta_description") || null,
+                slug: findField(row, "slug") || null,
+                tags: findField(row, "tags") ? findField(row, "tags").split(",").map((t: string) => t.trim()).filter(Boolean) : null,
                 status: "draft", catalog_id: catalogId,
               });
             }
@@ -1670,12 +1773,16 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
 
       let updated = 0;
       for (const row of rows) {
-        const sku = findVal(row, ["ref","sku","referencia","codigo","code","cod"]).trim();
-        const name = findVal(row, ["description","descricao","name","nome","titulo","title","produto","designacao"]).trim();
-        const rawImageUrl = findVal(row, ["image url","image_url","imagens","imagem","image","images","foto","photo","thumbnail"]).trim();
-        const supplierUrl = findVal(row, ["supplier_url","supplier url","fornecedor_url","fornecedor url","link fornecedor"]).trim();
-        const ean = findVal(row, ["ean","gtin","barcode","codigo barras"]).trim();
-        const brand = findVal(row, ["brand","marca"]).trim();
+        const sku = findField(row, "sku").trim();
+        const name = findField(row, "name").trim();
+        const rawImageUrl = findField(row, "image_url").trim();
+        const supplierUrl = findField(row, "supplier_url").trim();
+        const ean = findField(row, "ean").trim();
+        const brand = findField(row, "brand").trim();
+        const description = findField(row, "description").trim();
+        const shortDesc = findField(row, "short_description").trim();
+        const seoTitle = findField(row, "meta_title").trim();
+        const metaDesc = findField(row, "meta_description").trim();
 
         // Match product by SKU first, then by name
         const match = (sku && bySkuMap.get(sku.toLowerCase())) || (name && byNameMap.get(name.toLowerCase()));
@@ -1695,6 +1802,10 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
         if (ean) updates.ean = ean;
         if (supplierUrl) updates.supplier_url = supplierUrl;
         if (brand) updates.brand = brand;
+        if (description) updates.description = description;
+        if (shortDesc) updates.short_description = shortDesc;
+        if (seoTitle) updates.seo_title = seoTitle;
+        if (metaDesc) updates.meta_description = metaDesc;
 
         if (Object.keys(updates).length > 0) {
           await supabase.from("products").update(updates as any).eq("id", match.id);
@@ -1991,18 +2102,6 @@ function InlineProductForm({
 
 
 
-// Helper: extract first URL from potentially comma-separated image_url
-function getFirstImageUrl(imageUrl: string | null | undefined): string | null {
-  if (!imageUrl) return null;
-  const first = imageUrl.split(",")[0].trim();
-  return first.startsWith("http") ? first : null;
-}
-
-// Helper: extract all URLs from comma-separated image_url
-function getAllImageUrls(imageUrl: string | null | undefined): string[] {
-  if (!imageUrl) return [];
-  return imageUrl.split(",").map(u => u.trim()).filter(u => u.startsWith("http"));
-}
 
 function ImageGalleryTab({ products }: { products: Product[] }) {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);

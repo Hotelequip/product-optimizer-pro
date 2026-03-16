@@ -329,6 +329,8 @@ export default function Catalog() {
     const headerHints = [
       "description", "descricao", "designacao", "name", "nome", "ref", "referencia", "sku", "codigo",
       "tarif", "cost", "custo", "price", "preco", "pvp", "stock", "quantidade", "qty",
+      "image", "imagem", "imagens", "foto", "photo", "thumbnail",
+      "brand", "marca", "sale price", "regular price", "ean", "categories", "categoria",
     ];
 
     let bestIndex = 0;
@@ -490,13 +492,16 @@ export default function Catalog() {
           return {
             user_id: user.id,
             name,
-            description: null,
+            description: findVal(row, ["description long","descricao longa","long description"]) || null,
+            short_description: findVal(row, ["short description","descricao curta","short_description"]) || null,
             sku: findVal(row, ["ref", "sku", "referencia", "codigo", "code", "cod"]) || null,
+            ean: findVal(row, ["ean", "gtin", "barcode", "codigo barras"]) || null,
             cost: parseNum(findVal(row, ["cost", "custo", "tarif", "preco custo", "net", "euro"])),
-            price: parseNum(findVal(row, ["price", "preco", "pvp", "sell", "venda"])),
+            price: parseNum(findVal(row, ["price", "preco", "pvp", "sell", "venda", "sale price", "sale_price", "regular price", "regular_price"])),
             stock: Number.isFinite(stockRaw) ? Math.max(0, Math.trunc(stockRaw)) : 0,
             brand: findVal(row, ["brand", "marca"]) || null,
-            supplier_url: findVal(row, ["supplier_url", "url", "fornecedor_url"]) || null,
+            image_url: findVal(row, ["image url", "image_url", "imagens", "imagem", "image", "images", "foto", "photo", "thumbnail"]) || null,
+            supplier_url: findVal(row, ["supplier_url", "supplier url", "fornecedor_url", "fornecedor url", "link fornecedor"]) || null,
             status: "draft",
             catalog_id: catalogId,
           };
@@ -1414,7 +1419,7 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
   };
 
   const detectHeaderRowIndex = (rowsMatrix: unknown[][]) => {
-    const headerHints = ["description","descricao","designacao","name","nome","ref","referencia","sku","tarif","cost","custo","price","preco","pvp","stock","quantidade","qty"];
+    const headerHints = ["description","descricao","designacao","name","nome","ref","referencia","sku","tarif","cost","custo","price","preco","pvp","stock","quantidade","qty","image","imagem","imagens","foto","brand","marca","ean","sale price","categories","categoria"];
     let bestIndex = 0, bestScore = -1;
     for (let i = 0; i < Math.min(40, rowsMatrix.length); i++) {
       const cells = ((rowsMatrix[i] || []) as unknown[]).map(c => normalizeHeader(c)).filter(Boolean);
@@ -1450,14 +1455,16 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
             const name = findVal(row, ["description","descricao","name","nome","titulo","title","produto","designacao"]).trim();
             if (!name) continue;
             productsToInsert.push({
-              user_id: user.id, name, description: null,
+              user_id: user.id, name, description: findVal(row, ["description long","descricao longa","long description"]) || null,
+              short_description: findVal(row, ["short description","descricao curta","short_description"]) || null,
               sku: findVal(row, ["ref","sku","referencia","codigo","code","cod"]) || null,
+              ean: findVal(row, ["ean","gtin","barcode","codigo barras"]) || null,
               cost: parseNum(findVal(row, ["cost","custo","tarif","preco custo","net","euro"])),
               price: parseNum(findVal(row, ["price","preco","pvp","sell","venda","sale price","sale_price","regular price","regular_price"])),
               stock: Math.max(0, Math.trunc(parseNum(findVal(row, ["stock","estoque","qty","quantidade"])))),
               brand: findVal(row, ["brand","marca"]) || null,
               image_url: findVal(row, ["image url","image_url","imagens","imagem","image","images","foto","photo","thumbnail"]) || null,
-              supplier_url: findVal(row, ["supplier_url","url","fornecedor_url","supplier url","link"]) || null,
+              supplier_url: findVal(row, ["supplier_url","supplier url","fornecedor_url","fornecedor url","link fornecedor"]) || null,
               status: "draft", catalog_id: catalogId,
             });
           }

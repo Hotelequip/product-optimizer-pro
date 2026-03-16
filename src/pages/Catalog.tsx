@@ -2005,6 +2005,7 @@ function getAllImageUrls(imageUrl: string | null | undefined): string[] {
 
 function ImageGalleryTab({ products }: { products: Product[] }) {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedImageIdx, setSelectedImageIdx] = useState(0);
   const [generatingAi, setGeneratingAi] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const { toast } = useToast();

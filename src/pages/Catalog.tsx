@@ -15,7 +15,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Upload, Sheet, FileUp, Loader2, FolderPlus, Folder, FolderOpen, Trash2, Search, Pencil, ImageIcon, FileText, Download, File, X, Sparkles, Wand2, ZoomIn, CheckCircle2, AlertCircle, ArrowUpDown } from "lucide-react";
+import { Plus, Upload, Sheet, FileUp, Loader2, FolderPlus, Folder, FolderOpen, Trash2, Search, Pencil, ImageIcon, FileText, Download, File, X, Sparkles, Wand2, ZoomIn, CheckCircle2, AlertCircle, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { SpreadsheetEditor } from "@/components/SpreadsheetEditor";
@@ -2005,6 +2006,7 @@ function getAllImageUrls(imageUrl: string | null | undefined): string[] {
 
 function ImageGalleryTab({ products }: { products: Product[] }) {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedImageIdx, setSelectedImageIdx] = useState(0);
   const [generatingAi, setGeneratingAi] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const { toast } = useToast();
@@ -2112,7 +2114,7 @@ function ImageGalleryTab({ products }: { products: Product[] }) {
           <div
             key={product.id}
             className="border rounded-lg p-3 text-center space-y-2 hover:shadow-md transition-shadow cursor-pointer group relative"
-            onClick={() => setSelectedProduct(product)}
+            onClick={() => { setSelectedProduct(product); setSelectedImageIdx(0); }}
           >
             {getFirstImageUrl(product.image_url) ? (
               <div className="relative">
@@ -2146,34 +2148,65 @@ function ImageGalleryTab({ products }: { products: Product[] }) {
           </DialogHeader>
           {selectedProduct && (
             <div className="space-y-4">
-              <div className="flex items-center justify-center bg-muted/30 rounded-lg p-4 min-h-[300px]">
-                {getFirstImageUrl(selectedProduct.image_url) ? (
-                  <img
-                    src={getFirstImageUrl(selectedProduct.image_url)!}
-                    alt={selectedProduct.name}
-                    className="max-w-full max-h-[400px] object-contain rounded"
-                  />
-                ) : (
-                  <div className="text-center text-muted-foreground space-y-2">
-                    <ImageIcon className="h-16 w-16 mx-auto" />
-                    <p>Este produto não tem imagem</p>
-                  </div>
-                )}
-              </div>
-              {/* Show all images gallery */}
-              {getAllImageUrls(selectedProduct.image_url).length > 1 && (
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                  {getAllImageUrls(selectedProduct.image_url).map((url, idx) => (
-                    <img
-                      key={idx}
-                      src={url}
-                      alt={`${selectedProduct.name} ${idx + 1}`}
-                      className="h-20 w-20 object-contain rounded border cursor-pointer hover:border-primary transition-colors flex-shrink-0"
-                      onClick={() => setSelectedProduct({ ...selectedProduct, image_url: url })}
-                    />
-                  ))}
-                </div>
-              )}
+              {(() => {
+                const allUrls = getAllImageUrls(selectedProduct.image_url);
+                const currentUrl = allUrls[selectedImageIdx] || allUrls[0];
+                return (
+                  <>
+                    <div className="relative flex items-center justify-center bg-muted/30 rounded-lg p-4 min-h-[300px]">
+                      {currentUrl ? (
+                        <>
+                          <img
+                            src={currentUrl}
+                            alt={selectedProduct.name}
+                            className="max-w-full max-h-[400px] object-contain rounded"
+                          />
+                          {allUrls.length > 1 && (
+                            <>
+                              <button
+                                className="absolute left-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background border rounded-full p-1.5 shadow transition-colors"
+                                onClick={() => setSelectedImageIdx((prev) => (prev - 1 + allUrls.length) % allUrls.length)}
+                              >
+                                <ChevronLeft className="h-5 w-5" />
+                              </button>
+                              <button
+                                className="absolute right-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background border rounded-full p-1.5 shadow transition-colors"
+                                onClick={() => setSelectedImageIdx((prev) => (prev + 1) % allUrls.length)}
+                              >
+                                <ChevronRight className="h-5 w-5" />
+                              </button>
+                              <span className="absolute bottom-2 right-2 text-xs bg-background/80 border rounded px-2 py-0.5">
+                                {selectedImageIdx + 1} / {allUrls.length}
+                              </span>
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        <div className="text-center text-muted-foreground space-y-2">
+                          <ImageIcon className="h-16 w-16 mx-auto" />
+                          <p>Este produto não tem imagem</p>
+                        </div>
+                      )}
+                    </div>
+                    {allUrls.length > 1 && (
+                      <div className="flex gap-2 overflow-x-auto pb-2">
+                        {allUrls.map((url, idx) => (
+                          <img
+                            key={idx}
+                            src={url}
+                            alt={`${selectedProduct.name} ${idx + 1}`}
+                            className={cn(
+                              "h-20 w-20 object-contain rounded border-2 cursor-pointer hover:border-primary transition-colors flex-shrink-0",
+                              idx === selectedImageIdx ? "border-primary" : "border-transparent"
+                            )}
+                            onClick={() => setSelectedImageIdx(idx)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               {selectedProduct.sku && (
                 <p className="text-sm text-muted-foreground">SKU: {selectedProduct.sku}</p>

@@ -585,8 +585,11 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
                   setBulkProgress({ current: 0, total: totalProducts, label: "WooCommerce" });
                   try {
                     for (let i = 0; i < totalProducts; i += BATCH_SIZE) {
-                      if (!syncingWoo && i > 0) break; // allow cancel via state
-                      const batch = selected.slice(i, i + BATCH_SIZE);
+                      if (!syncingWoo && i > 0) break;
+                      const batch = selected.slice(i, i + BATCH_SIZE).map(p => ({
+                        ...p,
+                        category_name: categories.find(c => c.id === p.category_id)?.name || null,
+                      }));
                       const { data, error } = await supabase.functions.invoke("woo-sync", {
                         body: { action: "export", store_id: storeId, products: batch },
                       });

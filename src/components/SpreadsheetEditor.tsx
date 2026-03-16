@@ -569,8 +569,46 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
             }}>
               <Check className="mr-2 h-3 w-3" />Aprovar
             </Button>
-            <div className="flex items-center gap-1">
-              <FolderInput className="h-3.5 w-3.5 text-muted-foreground" />
+            {/* WooCommerce Sync */}
+            {wooStores.length > 0 && (
+              <div className="flex items-center gap-1">
+                <Upload className="h-3.5 w-3.5 text-muted-foreground" />
+                <Select onValueChange={async (storeId) => {
+                  const selected = products.filter(p => selectedProducts.has(p.id));
+                  if (selected.length === 0) return;
+                  setSyncingWoo(true);
+                  setBulkEnriching(true);
+                  setBulkProgress({ current: 0, total: selected.length, label: "WooCommerce" });
+                  try {
+                    const { data, error } = await supabase.functions.invoke("woo-sync", {
+                      body: { action: "export", store_id: storeId, products: selected },
+                    });
+                    if (error) throw error;
+                    if (data?.success) {
+                      const totalCreated = data.results?.reduce((sum: number, r: any) => sum + (r.created || 0), 0) || 0;
+                      toast({ title: `${totalCreated} produtos enviados para WooCommerce!` });
+                    } else {
+                      toast({ title: "Erro ao sincronizar", description: data?.error, variant: "destructive" });
+                    }
+                  } catch (e: any) {
+                    toast({ title: "Erro", description: e.message, variant: "destructive" });
+                  }
+                  setSyncingWoo(false);
+                  setBulkEnriching(false);
+                  setBulkProgress({ current: 0, total: 0, label: "" });
+                  setSelectedProducts(new Set());
+                }}>
+                  <SelectTrigger className="h-7 text-xs w-44">
+                    <SelectValue placeholder={syncingWoo ? "Enviando..." : "Enviar p/ WooCommerce"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {wooStores.filter(s => s.is_active).map(s => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
               <Select onValueChange={async (catalogId) => {
                 const ids = Array.from(selectedProducts);
                 const value = catalogId === "none" ? null : catalogId;

@@ -2148,13 +2148,11 @@ function ImageGalleryTab({ products }: { products: Product[] }) {
             <div className="space-y-4">
               <div className="flex items-center justify-center bg-muted/30 rounded-lg p-4 min-h-[300px]">
                 {getFirstImageUrl(selectedProduct.image_url) ? (
-                  <>
-                    <img
-                      src={getFirstImageUrl(selectedProduct.image_url)!}
-                      alt={selectedProduct.name}
-                      className="max-w-full max-h-[400px] object-contain rounded"
-                    />
-                  </>
+                  <img
+                    src={getFirstImageUrl(selectedProduct.image_url)!}
+                    alt={selectedProduct.name}
+                    className="max-w-full max-h-[400px] object-contain rounded"
+                  />
                 ) : (
                   <div className="text-center text-muted-foreground space-y-2">
                     <ImageIcon className="h-16 w-16 mx-auto" />
@@ -2171,15 +2169,11 @@ function ImageGalleryTab({ products }: { products: Product[] }) {
                       src={url}
                       alt={`${selectedProduct.name} ${idx + 1}`}
                       className="h-20 w-20 object-contain rounded border cursor-pointer hover:border-primary transition-colors flex-shrink-0"
-                      onClick={() => {
-                        // Update main view with this image
-                        setSelectedProduct({ ...selectedProduct, image_url: url });
-                      }}
+                      onClick={() => setSelectedProduct({ ...selectedProduct, image_url: url })}
                     />
                   ))}
                 </div>
               )}
-            </div>
 
               {selectedProduct.sku && (
                 <p className="text-sm text-muted-foreground">SKU: {selectedProduct.sku}</p>
@@ -2199,7 +2193,7 @@ function ImageGalleryTab({ products }: { products: Product[] }) {
                 <Button
                   variant="outline"
                   className="gap-2"
-                  disabled={!selectedProduct.image_url || optimizing}
+                  disabled={!getFirstImageUrl(selectedProduct.image_url) || optimizing}
                   onClick={() => handleOptimizeImage(selectedProduct)}
                 >
                   {optimizing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
@@ -2209,7 +2203,7 @@ function ImageGalleryTab({ products }: { products: Product[] }) {
                 <Button
                   variant="outline"
                   className="gap-2"
-                  disabled={!selectedProduct.image_url || generatingAi}
+                  disabled={!getFirstImageUrl(selectedProduct.image_url) || generatingAi}
                   onClick={() => handleGenerateLifestyle(selectedProduct)}
                 >
                   {generatingAi ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}

@@ -2178,8 +2178,8 @@ function ImageGalleryTab({ products }: { products: Product[] }) {
                     />
                   ))}
                 </div>
-              )
-              </div>
+              )}
+            </div>
 
               {selectedProduct.sku && (
                 <p className="text-sm text-muted-foreground">SKU: {selectedProduct.sku}</p>

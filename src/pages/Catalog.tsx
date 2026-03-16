@@ -1802,6 +1802,10 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
         if (ean) updates.ean = ean;
         if (supplierUrl) updates.supplier_url = supplierUrl;
         if (brand) updates.brand = brand;
+        if (description) updates.description = description;
+        if (shortDesc) updates.short_description = shortDesc;
+        if (seoTitle) updates.seo_title = seoTitle;
+        if (metaDesc) updates.meta_description = metaDesc;
 
         if (Object.keys(updates).length > 0) {
           await supabase.from("products").update(updates as any).eq("id", match.id);

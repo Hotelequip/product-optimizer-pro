@@ -1453,9 +1453,12 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
               user_id: user.id, name, description: null,
               sku: findVal(row, ["ref","sku","referencia","codigo","code","cod"]) || null,
               cost: parseNum(findVal(row, ["cost","custo","tarif","preco custo","net","euro"])),
-              price: parseNum(findVal(row, ["price","preco","pvp","sell","venda"])),
+              price: parseNum(findVal(row, ["price","preco","pvp","sell","venda","sale price","sale_price","regular price","regular_price"])),
               stock: Math.max(0, Math.trunc(parseNum(findVal(row, ["stock","estoque","qty","quantidade"])))),
-              brand: findVal(row, ["brand","marca"]) || null, status: "draft", catalog_id: catalogId,
+              brand: findVal(row, ["brand","marca"]) || null,
+              image_url: findVal(row, ["image url","image_url","imagens","imagem","image","images","foto","photo","thumbnail"]) || null,
+              supplier_url: findVal(row, ["supplier_url","url","fornecedor_url","supplier url","link"]) || null,
+              status: "draft", catalog_id: catalogId,
             });
           }
         } else {
@@ -1478,9 +1481,12 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
                 user_id: user.id, name, description: null,
                 sku: findVal(row, ["ref","sku","referencia","codigo","code","cod"]) || null,
                 cost: parseNum(findVal(row, ["cost","custo","tarif","preco custo","net","euro"])),
-                price: parseNum(findVal(row, ["price","preco","pvp","sell","venda"])),
+                price: parseNum(findVal(row, ["price","preco","pvp","sell","venda","sale price","sale_price","regular price","regular_price"])),
                 stock: Math.max(0, Math.trunc(parseNum(findVal(row, ["stock","estoque","qty","quantidade","std","units"])))),
-                brand: findVal(row, ["brand","marca"]) || null, status: "draft", catalog_id: catalogId,
+                brand: findVal(row, ["brand","marca"]) || null,
+                image_url: findVal(row, ["image url","image_url","imagens","imagem","image","images","foto","photo","thumbnail"]) || null,
+                supplier_url: findVal(row, ["supplier_url","url","fornecedor_url","supplier url","link"]) || null,
+                status: "draft", catalog_id: catalogId,
               });
             }
           }

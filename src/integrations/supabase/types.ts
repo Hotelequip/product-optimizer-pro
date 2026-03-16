@@ -100,6 +100,51 @@ export type Database = {
         }
         Relationships: []
       }
+      import_sessions: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          errors: Json | null
+          files_used: Json | null
+          id: string
+          log: Json | null
+          mode: string
+          products_created: number | null
+          products_processed: number | null
+          products_updated: number | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          errors?: Json | null
+          files_used?: Json | null
+          id?: string
+          log?: Json | null
+          mode?: string
+          products_created?: number | null
+          products_processed?: number | null
+          products_updated?: number | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          errors?: Json | null
+          files_used?: Json | null
+          id?: string
+          log?: Json | null
+          mode?: string
+          products_created?: number | null
+          products_processed?: number | null
+          products_updated?: number | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       price_history: {
         Row: {
           changed_at: string
@@ -220,6 +265,68 @@ export type Database = {
           },
         ]
       }
+      product_variations: {
+        Row: {
+          attributes: Json | null
+          created_at: string
+          ean: string | null
+          id: string
+          image_url: string | null
+          name: string | null
+          parent_product_id: string
+          price: number | null
+          regular_price: number | null
+          sale_price: number | null
+          sku: string | null
+          status: string | null
+          stock: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attributes?: Json | null
+          created_at?: string
+          ean?: string | null
+          id?: string
+          image_url?: string | null
+          name?: string | null
+          parent_product_id: string
+          price?: number | null
+          regular_price?: number | null
+          sale_price?: number | null
+          sku?: string | null
+          status?: string | null
+          stock?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attributes?: Json | null
+          created_at?: string
+          ean?: string | null
+          id?: string
+          image_url?: string | null
+          name?: string | null
+          parent_product_id?: string
+          price?: number | null
+          regular_price?: number | null
+          sale_price?: number | null
+          sku?: string | null
+          status?: string | null
+          stock?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_variations_parent_product_id_fkey"
+            columns: ["parent_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       products: {
         Row: {
           brand: string | null
@@ -227,7 +334,9 @@ export type Database = {
           category_id: string | null
           cost: number
           created_at: string
+          data_origin: Json | null
           description: string | null
+          ean: string | null
           enrichment_phase: number | null
           id: string
           image_url: string | null
@@ -256,7 +365,9 @@ export type Database = {
           category_id?: string | null
           cost?: number
           created_at?: string
+          data_origin?: Json | null
           description?: string | null
+          ean?: string | null
           enrichment_phase?: number | null
           id?: string
           image_url?: string | null
@@ -285,7 +396,9 @@ export type Database = {
           category_id?: string | null
           cost?: number
           created_at?: string
+          data_origin?: Json | null
           description?: string | null
+          ean?: string | null
           enrichment_phase?: number | null
           id?: string
           image_url?: string | null

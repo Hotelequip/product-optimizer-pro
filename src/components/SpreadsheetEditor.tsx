@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { Product, useUpdateProduct, useDeleteProduct } from "@/hooks/useProducts";
+import { useAllVariations, ProductVariation } from "@/hooks/useProductVariations";
 import { useCategories } from "@/hooks/useCategories";
 import { useCatalogs } from "@/hooks/useCatalogs";
 import { Badge } from "@/components/ui/badge";

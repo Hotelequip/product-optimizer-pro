@@ -578,17 +578,33 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
                   if (selected.length === 0) return;
                   setSyncingWoo(true);
                   setBulkEnriching(true);
-                  setBulkProgress({ current: 0, total: selected.length, label: "WooCommerce" });
+                  const BATCH_SIZE = 10;
+                  const totalProducts = selected.length;
+                  let sent = 0;
+                  let errors = 0;
+                  setBulkProgress({ current: 0, total: totalProducts, label: "WooCommerce" });
                   try {
-                    const { data, error } = await supabase.functions.invoke("woo-sync", {
-                      body: { action: "export", store_id: storeId, products: selected },
-                    });
-                    if (error) throw error;
-                    if (data?.success) {
-                      const totalCreated = data.results?.reduce((sum: number, r: any) => sum + (r.created || 0), 0) || 0;
-                      toast({ title: `${totalCreated} produtos enviados para WooCommerce!` });
-                    } else {
-                      toast({ title: "Erro ao sincronizar", description: data?.error, variant: "destructive" });
+                    for (let i = 0; i < totalProducts; i += BATCH_SIZE) {
+                      if (!syncingWoo && i > 0) break; // allow cancel via state
+                      const batch = selected.slice(i, i + BATCH_SIZE);
+                      const { data, error } = await supabase.functions.invoke("woo-sync", {
+                        body: { action: "export", store_id: storeId, products: batch },
+                      });
+                      if (error) {
+                        errors += batch.length;
+                      } else if (data?.success) {
+                        const created = data.results?.reduce((sum: number, r: any) => sum + (r.created || 0), 0) || 0;
+                        sent += created;
+                      } else {
+                        errors += batch.length;
+                      }
+                      setBulkProgress({ current: Math.min(i + BATCH_SIZE, totalProducts), total: totalProducts, label: "WooCommerce" });
+                    }
+                    if (sent > 0) {
+                      toast({ title: `${sent} produtos enviados para WooCommerce!` });
+                    }
+                    if (errors > 0) {
+                      toast({ title: `${errors} produtos falharam`, variant: "destructive" });
                     }
                   } catch (e: any) {
                     toast({ title: "Erro", description: e.message, variant: "destructive" });

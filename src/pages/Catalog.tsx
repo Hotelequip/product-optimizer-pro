@@ -1455,14 +1455,16 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
             const name = findVal(row, ["description","descricao","name","nome","titulo","title","produto","designacao"]).trim();
             if (!name) continue;
             productsToInsert.push({
-              user_id: user.id, name, description: null,
+              user_id: user.id, name, description: findVal(row, ["description long","descricao longa","long description"]) || null,
+              short_description: findVal(row, ["short description","descricao curta","short_description"]) || null,
               sku: findVal(row, ["ref","sku","referencia","codigo","code","cod"]) || null,
+              ean: findVal(row, ["ean","gtin","barcode","codigo barras"]) || null,
               cost: parseNum(findVal(row, ["cost","custo","tarif","preco custo","net","euro"])),
               price: parseNum(findVal(row, ["price","preco","pvp","sell","venda","sale price","sale_price","regular price","regular_price"])),
               stock: Math.max(0, Math.trunc(parseNum(findVal(row, ["stock","estoque","qty","quantidade"])))),
               brand: findVal(row, ["brand","marca"]) || null,
               image_url: findVal(row, ["image url","image_url","imagens","imagem","image","images","foto","photo","thumbnail"]) || null,
-              supplier_url: findVal(row, ["supplier_url","url","fornecedor_url","supplier url","link"]) || null,
+              supplier_url: findVal(row, ["supplier_url","supplier url","fornecedor_url","fornecedor url","link fornecedor"]) || null,
               status: "draft", catalog_id: catalogId,
             });
           }

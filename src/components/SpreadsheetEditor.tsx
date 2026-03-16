@@ -597,14 +597,15 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
                         errors += batch.length;
                       } else if (data?.success) {
                         const created = data.results?.reduce((sum: number, r: any) => sum + (r.created || 0), 0) || 0;
-                        sent += created;
+                        const updated = data.results?.reduce((sum: number, r: any) => sum + (r.updated || 0), 0) || 0;
+                        sent += created + updated;
                       } else {
                         errors += batch.length;
                       }
                       setBulkProgress({ current: Math.min(i + BATCH_SIZE, totalProducts), total: totalProducts, label: "WooCommerce" });
                     }
                     if (sent > 0) {
-                      toast({ title: `${sent} produtos enviados para WooCommerce!` });
+                      toast({ title: `${sent} produtos criados/atualizados no WooCommerce!` });
                     }
                     if (errors > 0) {
                       toast({ title: `${errors} produtos falharam`, variant: "destructive" });

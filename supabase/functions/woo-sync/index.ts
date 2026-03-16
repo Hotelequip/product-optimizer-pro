@@ -128,8 +128,11 @@ Deno.serve(async (req) => {
         return null;
       }
 
-      // Pre-fetch existing WooCommerce products to match by SKU
-      const existingWooProducts = new Map<string, number>(); // sku -> woo id
+      // Pre-fetch existing WooCommerce products to match by SKU/slug
+      const existingWooProductsBySku = new Map<string, number>();
+      const existingWooProductsBySlug = new Map<string, number>();
+      const normalizeKey = (value: unknown) => String(value ?? '').trim().toLowerCase();
+
       try {
         let prodPage = 1;
         let hasMoreProds = true;
@@ -140,7 +143,10 @@ Deno.serve(async (req) => {
           if (prodRes.ok) {
             const prods = await prodRes.json();
             for (const wp of prods) {
-              if (wp.sku) existingWooProducts.set(wp.sku, wp.id);
+              const skuKey = normalizeKey(wp.sku);
+              const slugKey = normalizeKey(wp.slug);
+              if (skuKey) existingWooProductsBySku.set(skuKey, wp.id);
+              if (slugKey) existingWooProductsBySlug.set(slugKey, wp.id);
             }
             hasMoreProds = prods.length === 100;
             prodPage++;

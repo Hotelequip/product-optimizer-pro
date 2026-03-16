@@ -2114,7 +2114,7 @@ function ImageGalleryTab({ products }: { products: Product[] }) {
           <div
             key={product.id}
             className="border rounded-lg p-3 text-center space-y-2 hover:shadow-md transition-shadow cursor-pointer group relative"
-            onClick={() => setSelectedProduct(product)}
+            onClick={() => { setSelectedProduct(product); setSelectedImageIdx(0); }}
           >
             {getFirstImageUrl(product.image_url) ? (
               <div className="relative">

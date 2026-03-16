@@ -117,8 +117,8 @@ function OptimizedProductsTab({ products }: { products: Product[] }) {
                   className="w-full flex items-center gap-3 p-3 text-left"
                   onClick={() => setExpandedId(isExpanded ? null : p.id)}
                 >
-                  {p.image_url ? (
-                    <img src={p.image_url} alt={p.name} className="h-12 w-12 rounded object-cover flex-shrink-0 border" />
+                  {getFirstImageUrl(p.image_url) ? (
+                    <img src={getFirstImageUrl(p.image_url)!} alt={p.name} className="h-12 w-12 rounded object-cover flex-shrink-0 border" />
                   ) : (
                     <div className="h-12 w-12 rounded bg-muted flex items-center justify-center flex-shrink-0">
                       <ImageIcon className="h-5 w-5 text-muted-foreground" />
@@ -1671,7 +1671,7 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
       for (const row of rows) {
         const sku = findVal(row, ["ref","sku","referencia","codigo","code","cod"]).trim();
         const name = findVal(row, ["description","descricao","name","nome","titulo","title","produto","designacao"]).trim();
-        const imageUrl = findVal(row, ["image url","image_url","imagens","imagem","image","images","foto","photo","thumbnail"]).trim();
+        const rawImageUrl = findVal(row, ["image url","image_url","imagens","imagem","image","images","foto","photo","thumbnail"]).trim();
         const supplierUrl = findVal(row, ["supplier_url","supplier url","fornecedor_url","fornecedor url","link fornecedor"]).trim();
         const ean = findVal(row, ["ean","gtin","barcode","codigo barras"]).trim();
         const brand = findVal(row, ["brand","marca"]).trim();
@@ -1680,9 +1680,17 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
         const match = (sku && bySkuMap.get(sku.toLowerCase())) || (name && byNameMap.get(name.toLowerCase()));
         if (!match) continue;
 
-        // Build update object with only non-empty fields that are currently missing
+        // Split multiple image URLs (comma or space separated)
+        const imageUrls = rawImageUrl
+          ? rawImageUrl.split(/,\s*/).map(u => u.trim()).filter(u => u.startsWith("http"))
+          : [];
+
+        const primaryImage = imageUrls[0] || null;
+        const extraImages = imageUrls.slice(1);
+
+        // Build update object
         const updates: Record<string, unknown> = {};
-        if (imageUrl && !match.image_url) updates.image_url = imageUrl;
+        if (primaryImage) updates.image_url = primaryImage;
         if (ean) updates.ean = ean;
         if (supplierUrl) updates.supplier_url = supplierUrl;
         if (brand) updates.brand = brand;
@@ -1691,9 +1699,30 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
           await supabase.from("products").update(updates as any).eq("id", match.id);
           updated++;
         }
+
+        // Insert extra images into product_images table
+        if (extraImages.length > 0) {
+          const imagesToInsert = extraImages.map((url, idx) => ({
+            product_id: match.id,
+            user_id: user.id,
+            url,
+            type: "original",
+            is_primary: false,
+          }));
+          // Also insert primary as product_images entry
+          imagesToInsert.unshift({
+            product_id: match.id,
+            user_id: user.id,
+            url: primaryImage!,
+            type: "original",
+            is_primary: true,
+          });
+          await supabase.from("product_images").insert(imagesToInsert as any);
+        }
       }
 
       await queryClient.invalidateQueries({ queryKey: ["products"] });
+      await queryClient.invalidateQueries({ queryKey: ["product_images"] });
       toast({ title: `${updated} produtos atualizados de "${file.file_name}"!` });
     } catch (e: any) {
       toast({ title: "Erro na sincronização", description: e.message, variant: "destructive" });
@@ -1961,6 +1990,19 @@ function InlineProductForm({
 
 
 
+// Helper: extract first URL from potentially comma-separated image_url
+function getFirstImageUrl(imageUrl: string | null | undefined): string | null {
+  if (!imageUrl) return null;
+  const first = imageUrl.split(",")[0].trim();
+  return first.startsWith("http") ? first : null;
+}
+
+// Helper: extract all URLs from comma-separated image_url
+function getAllImageUrls(imageUrl: string | null | undefined): string[] {
+  if (!imageUrl) return [];
+  return imageUrl.split(",").map(u => u.trim()).filter(u => u.startsWith("http"));
+}
+
 function ImageGalleryTab({ products }: { products: Product[] }) {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [generatingAi, setGeneratingAi] = useState(false);
@@ -1968,8 +2010,8 @@ function ImageGalleryTab({ products }: { products: Product[] }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const withImage = products.filter(p => p.image_url);
-  const withoutImage = products.filter(p => !p.image_url);
+  const withImage = products.filter(p => getFirstImageUrl(p.image_url));
+  const withoutImage = products.filter(p => !getFirstImageUrl(p.image_url));
 
   const handleGenerateAiImage = async (product: Product) => {
     if (generatingAi) return;
@@ -2072,9 +2114,14 @@ function ImageGalleryTab({ products }: { products: Product[] }) {
             className="border rounded-lg p-3 text-center space-y-2 hover:shadow-md transition-shadow cursor-pointer group relative"
             onClick={() => setSelectedProduct(product)}
           >
-            {product.image_url ? (
+            {getFirstImageUrl(product.image_url) ? (
               <div className="relative">
-                <img src={product.image_url} alt={product.name} className="w-full h-28 object-contain rounded" />
+                <img src={getFirstImageUrl(product.image_url)!} alt={product.name} className="w-full h-28 object-contain rounded" />
+                {getAllImageUrls(product.image_url).length > 1 && (
+                  <span className="absolute top-1 right-1 bg-foreground/70 text-background text-[10px] px-1.5 py-0.5 rounded-full">
+                    +{getAllImageUrls(product.image_url).length - 1}
+                  </span>
+                )}
                 <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/10 rounded transition-colors flex items-center justify-center">
                   <ZoomIn className="h-6 w-6 text-background opacity-0 group-hover:opacity-80 transition-opacity" />
                 </div>
@@ -2100,9 +2147,9 @@ function ImageGalleryTab({ products }: { products: Product[] }) {
           {selectedProduct && (
             <div className="space-y-4">
               <div className="flex items-center justify-center bg-muted/30 rounded-lg p-4 min-h-[300px]">
-                {selectedProduct.image_url ? (
+                {getFirstImageUrl(selectedProduct.image_url) ? (
                   <img
-                    src={selectedProduct.image_url}
+                    src={getFirstImageUrl(selectedProduct.image_url)!}
                     alt={selectedProduct.name}
                     className="max-w-full max-h-[400px] object-contain rounded"
                   />
@@ -2113,6 +2160,20 @@ function ImageGalleryTab({ products }: { products: Product[] }) {
                   </div>
                 )}
               </div>
+              {/* Show all images gallery */}
+              {getAllImageUrls(selectedProduct.image_url).length > 1 && (
+                <div className="flex gap-2 overflow-x-auto pb-2">
+                  {getAllImageUrls(selectedProduct.image_url).map((url, idx) => (
+                    <img
+                      key={idx}
+                      src={url}
+                      alt={`${selectedProduct.name} ${idx + 1}`}
+                      className="h-20 w-20 object-contain rounded border cursor-pointer hover:border-primary transition-colors flex-shrink-0"
+                      onClick={() => setSelectedProduct({ ...selectedProduct, image_url: url })}
+                    />
+                  ))}
+                </div>
+              )}
 
               {selectedProduct.sku && (
                 <p className="text-sm text-muted-foreground">SKU: {selectedProduct.sku}</p>
@@ -2132,7 +2193,7 @@ function ImageGalleryTab({ products }: { products: Product[] }) {
                 <Button
                   variant="outline"
                   className="gap-2"
-                  disabled={!selectedProduct.image_url || optimizing}
+                  disabled={!getFirstImageUrl(selectedProduct.image_url) || optimizing}
                   onClick={() => handleOptimizeImage(selectedProduct)}
                 >
                   {optimizing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
@@ -2142,7 +2203,7 @@ function ImageGalleryTab({ products }: { products: Product[] }) {
                 <Button
                   variant="outline"
                   className="gap-2"
-                  disabled={!selectedProduct.image_url || generatingAi}
+                  disabled={!getFirstImageUrl(selectedProduct.image_url) || generatingAi}
                   onClick={() => handleGenerateLifestyle(selectedProduct)}
                 >
                   {generatingAi ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />}

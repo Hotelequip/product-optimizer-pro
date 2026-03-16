@@ -966,6 +966,107 @@ export default function Catalog() {
       description: `${files.length} ficheiro(s) associado(s).`,
     });
 
+// ─── Module-level helpers (shared by Catalog and CatalogFilesTab) ───
+
+const normalizeHeader = (h: unknown) =>
+  String(h || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+
+const parseNum = (val: unknown): number => {
+  if (val === null || val === undefined || val === "") return 0;
+  if (typeof val === "number") return val;
+  let s = String(val).replace(/\s/g, "").replace(/[R$€]/g, "");
+  const lastDot = s.lastIndexOf(".");
+  const lastComma = s.lastIndexOf(",");
+  if (lastComma > lastDot) s = s.replace(/\./g, "").replace(",", ".");
+  else if (lastDot > lastComma) s = s.replace(/,/g, "");
+  return parseFloat(s) || 0;
+};
+
+const FIELD_ALIASES: Record<string, string[]> = {
+  name: ["name","nome","title","titulo","designacao","description","descricao","product","produto","article","artigo","item","libelle","designation","woo:name"],
+  description: ["content","conteudo","long description","descricao longa","description long","description longue","full description","corpo","body","woo:description"],
+  short_description: ["short description","descricao curta","short_description","resumo","excerpt","intro","woo:short description"],
+  sku: ["ref","sku","referencia","codigo","code","cod","reference","article number","part number","modelo","model","product code","item number","woo:sku"],
+  ean: ["ean","gtin","barcode","codigo barras","upc","isbn","ean13","ean-13","codigo de barras"],
+  cost: ["cost","custo","tarif","preco custo","net","euro","unit cost","wholesale","compra","prix achat","purchase price","buying price","cost price"],
+  regular_price: ["regular price","regular_price","preco","pvp","price","sell","venda","retail","preco venda","prix","prix vente","woo:regular price"],
+  sale_price: ["sale price","sale_price","preco promocional","promo","promotional","prix promo","offer price","discount price","woo:sale price"],
+  stock: ["stock","estoque","qty","quantidade","inventory","units","std","quantity","disponivel","available","en stock"],
+  brand: ["brand","marca","fabricante","manufacturer","vendor","fornecedor"],
+  image_url: ["image","images","image url","image_url","imagens","imagem","foto","photo","thumbnail","picture","img","woo:images","gallery","galeria","image 1"],
+  supplier_url: ["supplier_url","supplier url","fornecedor_url","fornecedor url","link fornecedor","url","link","product url","external url","woo:external url"],
+  categories: ["categories","categorias","categoria","category","cat","woo:categories","product categories"],
+  tags: ["tags","etiquetas","palavras chave","keywords","woo:tags"],
+  weight: ["weight","peso","poids","woo:weight"],
+  dimensions: ["dimensions","dimensoes","tamanho","size"],
+  type: ["type","tipo","product type","woo:type"],
+  status: ["status","estado","state","woo:published"],
+  slug: ["slug","permalink","url amigavel"],
+  tax_status: ["tax status","tax_status","imposto","taxable","woo:tax status"],
+  tax_class: ["tax class","tax_class","classe imposto","woo:tax class"],
+  meta_title: ["seo title","meta title","rank math title","seo titulo","woo:meta: rank_math_title"],
+  meta_description: ["seo description","meta description","rank math description","seo descricao","woo:meta: rank_math_description"],
+  focus_keyword: ["focus keyword","keyword","palavra chave","rank math focus keyword","woo:meta: rank_math_focus_keyword"],
+};
+
+const findVal = (row: Record<string, string>, keys: string[]): string => {
+  const normalizedKeys = keys.map(normalizeHeader);
+  for (const rk of Object.keys(row)) {
+    const nh = normalizeHeader(rk);
+    if (normalizedKeys.some((k) => nh.includes(k))) return row[rk];
+  }
+  return "";
+};
+
+const findField = (row: Record<string, string>, field: string): string => {
+  return findVal(row, FIELD_ALIASES[field] || []);
+};
+
+const detectHeaderRowIndex = (rowsMatrix: unknown[][]) => {
+  const headerHints = [
+    "description","descricao","designacao","name","nome","ref","referencia","sku","codigo",
+    "tarif","cost","custo","price","preco","pvp","stock","quantidade","qty",
+    "image","imagem","imagens","foto","photo","thumbnail",
+    "brand","marca","sale price","regular price","ean","categories","categoria",
+  ];
+  let bestIndex = 0;
+  let bestScore = -1;
+  for (let i = 0; i < Math.min(40, rowsMatrix.length); i++) {
+    const row = (rowsMatrix[i] || []) as unknown[];
+    const cells = row.map((c) => normalizeHeader(c)).filter(Boolean);
+    if (cells.length < 2) continue;
+    const hintScore = cells.reduce((acc, cell) => {
+      const matchesHint = headerHints.some((hint) => cell.includes(hint));
+      return acc + (matchesHint ? 3 : /[a-zA-ZÀ-ÿ]/.test(cell) ? 1 : 0);
+    }, 0);
+    if (hintScore > bestScore) { bestScore = hintScore; bestIndex = i; }
+  }
+  if (bestScore > 0) return bestIndex;
+  for (let i = 0; i < Math.min(20, rowsMatrix.length); i++) {
+    const row = (rowsMatrix[i] || []) as unknown[];
+    const nonEmpty = row.filter((c) => String(c || "").trim().length > 0).length;
+    const hasText = row.some((c) => typeof c === "string" && c.trim().length > 1 && Number.isNaN(Number(c)));
+    if (nonEmpty >= 3 && hasText) return i;
+  }
+  return 0;
+};
+
+const parseCsvLine = (line: string, delimiter: string) => {
+  const values: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (char === delimiter && !inQuotes) { values.push(current.trim()); current = ""; }
+    else current += char;
+  }
+  values.push(current.trim());
+  return values;
+};
+
 
   };
 

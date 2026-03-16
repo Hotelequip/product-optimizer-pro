@@ -1393,6 +1393,7 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [extractingFileId, setExtractingFileId] = useState<string | null>(null);
+  const [syncingFileId, setSyncingFileId] = useState<string | null>(null);
 
   const catalogId = selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized" ? selectedCatalogId : null;
 
@@ -1607,6 +1608,100 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
     }
   };
 
+  // Sync: re-read Excel and update existing products by SKU (fill missing image_url etc.)
+  const syncProductsFromFile = async (file: { id: string; file_name: string; file_url: string; file_type: string }) => {
+    if (!user) return;
+    setSyncingFileId(file.id);
+    try {
+      const response = await fetch(file.file_url);
+      if (!response.ok) throw new Error("Não foi possível descarregar o ficheiro.");
+      const blob = await response.blob();
+      const ext = file.file_name.split(".").pop()?.toLowerCase();
+      if (ext !== "xlsx" && ext !== "xls" && ext !== "csv") {
+        throw new Error("Sincronização só é suportada para ficheiros Excel/CSV.");
+      }
+
+      // Parse rows from file
+      const rows: Record<string, string>[] = [];
+      if (ext === "csv") {
+        const text = await blob.text();
+        const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (lines.length < 2) throw new Error("CSV sem dados.");
+        const delimiter = (lines[0].match(/;/g)?.length ?? 0) > (lines[0].match(/,/g)?.length ?? 0) ? ";" : ",";
+        const headers = lines[0].split(delimiter).map(h => h.trim().replace(/^"|"$/g, ""));
+        for (let i = 1; i < lines.length; i++) {
+          const vals = lines[i].split(delimiter).map(v => v.trim().replace(/^"|"$/g, ""));
+          const row: Record<string, string> = {};
+          headers.forEach((h, idx) => { row[h] = vals[idx] || ""; });
+          rows.push(row);
+        }
+      } else {
+        const XLSX = await import("xlsx");
+        const buffer = await blob.arrayBuffer();
+        const wb = XLSX.read(buffer, { type: "array" });
+        for (const sheetName of wb.SheetNames) {
+          const ws = wb.Sheets[sheetName];
+          const allRows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "" });
+          const headerRowIdx = detectHeaderRowIndex(allRows as unknown[][]);
+          const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "", range: headerRowIdx });
+          for (const r of jsonData) {
+            const row: Record<string, string> = {};
+            Object.keys(r).forEach(k => { row[String(k).trim()] = String(r[k] ?? "").trim(); });
+            rows.push(row);
+          }
+        }
+      }
+
+      // Get existing products for this catalog
+      const catalogId = selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized" ? selectedCatalogId : null;
+      let query = supabase.from("products").select("id, sku, name, image_url").eq("user_id", user.id);
+      if (catalogId) query = query.eq("catalog_id", catalogId);
+      const { data: existingProducts } = await query;
+      if (!existingProducts || existingProducts.length === 0) throw new Error("Nenhum produto encontrado para sincronizar.");
+
+      // Build lookup by SKU and name
+      const bySkuMap = new Map<string, typeof existingProducts[0]>();
+      const byNameMap = new Map<string, typeof existingProducts[0]>();
+      for (const p of existingProducts) {
+        if (p.sku) bySkuMap.set(p.sku.toLowerCase().trim(), p);
+        if (p.name) byNameMap.set(p.name.toLowerCase().trim(), p);
+      }
+
+      let updated = 0;
+      for (const row of rows) {
+        const sku = findVal(row, ["ref","sku","referencia","codigo","code","cod"]).trim();
+        const name = findVal(row, ["description","descricao","name","nome","titulo","title","produto","designacao"]).trim();
+        const imageUrl = findVal(row, ["image url","image_url","imagens","imagem","image","images","foto","photo","thumbnail"]).trim();
+        const supplierUrl = findVal(row, ["supplier_url","supplier url","fornecedor_url","fornecedor url","link fornecedor"]).trim();
+        const ean = findVal(row, ["ean","gtin","barcode","codigo barras"]).trim();
+        const brand = findVal(row, ["brand","marca"]).trim();
+
+        // Match product by SKU first, then by name
+        const match = (sku && bySkuMap.get(sku.toLowerCase())) || (name && byNameMap.get(name.toLowerCase()));
+        if (!match) continue;
+
+        // Build update object with only non-empty fields that are currently missing
+        const updates: Record<string, unknown> = {};
+        if (imageUrl && !match.image_url) updates.image_url = imageUrl;
+        if (ean) updates.ean = ean;
+        if (supplierUrl) updates.supplier_url = supplierUrl;
+        if (brand) updates.brand = brand;
+
+        if (Object.keys(updates).length > 0) {
+          await supabase.from("products").update(updates as any).eq("id", match.id);
+          updated++;
+        }
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ["products"] });
+      toast({ title: `${updated} produtos atualizados de "${file.file_name}"!` });
+    } catch (e: any) {
+      toast({ title: "Erro na sincronização", description: e.message, variant: "destructive" });
+    } finally {
+      setSyncingFileId(null);
+    }
+  };
+
   const uploadFile = async (file: globalThis.File) => {
     if (!user) {
       toast({ title: "Sessão expirada", description: "Inicie sessão novamente para carregar ficheiros.", variant: "destructive" });
@@ -1726,6 +1821,19 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
                       <><Loader2 className="h-3 w-3 animate-spin" />Extraindo...</>
                     ) : (
                       <><Sparkles className="h-3 w-3" />Extrair Produtos</>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1"
+                    disabled={syncingFileId === f.id || f.file_type === "other"}
+                    onClick={(e) => { e.stopPropagation(); syncProductsFromFile(f); }}
+                  >
+                    {syncingFileId === f.id ? (
+                      <><Loader2 className="h-3 w-3 animate-spin" />Sincronizando...</>
+                    ) : (
+                      <><ArrowUpDown className="h-3 w-3" />Sincronizar</>
                     )}
                   </Button>
                   <a href={f.file_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>

@@ -15,6 +15,7 @@ export interface Product {
   status: "active" | "inactive" | "draft";
   image_url: string | null;
   sku: string | null;
+  ean: string | null;
   supplier_url: string | null;
   brand: string | null;
   seo_title: string | null;
@@ -29,6 +30,7 @@ export interface Product {
   short_description: string | null;
   optimized_title: string | null;
   product_type: string;
+  data_origin: Record<string, string> | null;
   created_at: string;
   updated_at: string;
 }

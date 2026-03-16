@@ -609,6 +609,8 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
                 </Select>
               </div>
             )}
+            <div className="flex items-center gap-1">
+              <FolderInput className="h-3.5 w-3.5 text-muted-foreground" />
               <Select onValueChange={async (catalogId) => {
                 const ids = Array.from(selectedProducts);
                 const value = catalogId === "none" ? null : catalogId;

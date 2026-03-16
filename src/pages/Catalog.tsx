@@ -1652,6 +1652,19 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
                       {formatSize(f.file_size)} · {new Date(f.created_at).toLocaleDateString("pt-PT")}
                     </p>
                   </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1"
+                    disabled={extractingFileId === f.id || f.file_type === "other"}
+                    onClick={(e) => { e.stopPropagation(); extractProductsFromFile(f); }}
+                  >
+                    {extractingFileId === f.id ? (
+                      <><Loader2 className="h-3 w-3 animate-spin" />Extraindo...</>
+                    ) : (
+                      <><Sparkles className="h-3 w-3" />Extrair Produtos</>
+                    )}
+                  </Button>
                   <a href={f.file_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
                     <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
                       <Download className="h-3.5 w-3.5" />

@@ -1823,6 +1823,19 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
                       <><Sparkles className="h-3 w-3" />Extrair Produtos</>
                     )}
                   </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1"
+                    disabled={syncingFileId === f.id || f.file_type === "other"}
+                    onClick={(e) => { e.stopPropagation(); syncProductsFromFile(f); }}
+                  >
+                    {syncingFileId === f.id ? (
+                      <><Loader2 className="h-3 w-3 animate-spin" />Sincronizando...</>
+                    ) : (
+                      <><ArrowUpDown className="h-3 w-3" />Sincronizar</>
+                    )}
+                  </Button>
                   <a href={f.file_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
                     <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
                       <Download className="h-3.5 w-3.5" />

@@ -270,10 +270,41 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
       return html.replace(/<[^>]*>/g, "").trim();
     };
 
-    const wooRows = productsToExport.map(p => {
+    // Build rows: parent products + their variations
+    const wooRows: any[] = [];
+
+    for (const p of productsToExport) {
       const catName = categories.find(c => c.id === p.category_id)?.name || "";
-      return {
-        "Type": p.product_type || "simple",
+      const variations = allVariations.filter(v => v.parent_product_id === p.id);
+      const isVariable = p.product_type === "variable" || variations.length > 0;
+
+      // Collect unique attribute names from variations
+      const attrNames: string[] = [];
+      if (isVariable && variations.length > 0) {
+        for (const v of variations) {
+          for (const attr of (v.attributes || [])) {
+            if (!attrNames.includes(attr.name)) attrNames.push(attr.name);
+          }
+        }
+      }
+
+      // Build attribute columns for parent (aggregated values)
+      const attrCols: Record<string, string> = {};
+      attrNames.forEach((name, i) => {
+        const num = i + 1;
+        const allValues = variations
+          .map(v => (v.attributes || []).find((a: any) => a.name === name)?.value)
+          .filter(Boolean);
+        const uniqueValues = [...new Set(allValues)];
+        attrCols[`Attribute ${num} name`] = name;
+        attrCols[`Attribute ${num} value(s)`] = uniqueValues.join(" | ");
+        attrCols[`Attribute ${num} visible`] = "1";
+        attrCols[`Attribute ${num} global`] = "1";
+      });
+
+      // Parent product row
+      wooRows.push({
+        "Type": isVariable ? "variable" : "simple",
         "SKU": p.sku || "",
         "Name": p.optimized_title || p.name,
         "Published": p.status === "active" ? 1 : 0,
@@ -285,28 +316,89 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
         "In stock?": p.stock > 0 ? 1 : 0,
         "Stock": p.stock,
         "Regular price": p.price || "",
+        "Sale price": "",
         "Categories": catName,
         "Tags": (p.tags || []).join(", "),
         "Images": p.image_url || "",
-        "Meta: _yoast_wpseo_title": p.seo_title || p.optimized_title || "",
-        "Meta: _yoast_wpseo_metadesc": p.meta_description || "",
-        "Meta: _yoast_wpseo_focuskw": stripHtml(p.optimized_title),
+        "Product Image Gallery": "",
+        "Parent": "",
+        "Marca Do Produto": p.brand || "",
+        "Modelo Do Produto": "",
+        "EAN do produto": (p as any).ean || "",
+        "Up-Sells": "",
+        "Cross-Sells": "",
+        "Status": p.status === "active" ? "publish" : "draft",
+        "Images Alt Text": stripHtml(p.optimized_title || p.name),
+        ...attrCols,
+        "meta:rank_math_title": p.seo_title || p.optimized_title || "",
+        "meta:rank_math_description": p.meta_description || "",
+        "meta:rank_math_focus_keyword": stripHtml(p.optimized_title || p.name),
         "Slug": p.slug || "",
-      };
-    });
+      });
+
+      // Variation rows
+      if (isVariable && variations.length > 0) {
+        for (const v of variations) {
+          const varAttrCols: Record<string, string> = {};
+          attrNames.forEach((name, i) => {
+            const num = i + 1;
+            const val = (v.attributes || []).find((a: any) => a.name === name)?.value || "";
+            varAttrCols[`Attribute ${num} name`] = name;
+            varAttrCols[`Attribute ${num} value(s)`] = val;
+            varAttrCols[`Attribute ${num} visible`] = "";
+            varAttrCols[`Attribute ${num} global`] = "1";
+          });
+
+          wooRows.push({
+            "Type": "variation",
+            "SKU": v.sku || "",
+            "Name": v.name || "",
+            "Published": 1,
+            "Is featured?": "",
+            "Visibility in catalog": "",
+            "Short description": "",
+            "Description": "",
+            "Tax status": "taxable",
+            "In stock?": v.stock > 0 ? 1 : 0,
+            "Stock": v.stock,
+            "Regular price": v.regular_price || v.price || "",
+            "Sale price": v.sale_price || "",
+            "Categories": "",
+            "Tags": "",
+            "Images": v.image_url || "",
+            "Product Image Gallery": "",
+            "Parent": `id:${p.sku || p.id}`,
+            "Marca Do Produto": "",
+            "Modelo Do Produto": "",
+            "EAN do produto": v.ean || "",
+            "Up-Sells": "",
+            "Cross-Sells": "",
+            "Status": v.status === "draft" ? "draft" : "publish",
+            "Images Alt Text": "",
+            ...varAttrCols,
+            "meta:rank_math_title": "",
+            "meta:rank_math_description": "",
+            "meta:rank_math_focus_keyword": "",
+            "Slug": "",
+          });
+        }
+      }
+    }
 
     const ws = XLSX.utils.json_to_sheet(wooRows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Products");
 
     // Auto-size columns
-    const colWidths = Object.keys(wooRows[0] || {}).map(key => ({
-      wch: Math.max(key.length, ...wooRows.map(r => String((r as any)[key] || "").substring(0, 50).length)) + 2,
-    }));
-    ws["!cols"] = colWidths;
+    if (wooRows.length > 0) {
+      const colWidths = Object.keys(wooRows[0]).map(key => ({
+        wch: Math.max(key.length, ...wooRows.map(r => String(r[key] || "").substring(0, 50).length)) + 2,
+      }));
+      ws["!cols"] = colWidths;
+    }
 
     XLSX.writeFile(wb, `woocommerce-import-${new Date().toISOString().slice(0, 10)}.xlsx`);
-    toast({ title: `${wooRows.length} produtos exportados para Excel WooCommerce!` });
+    toast({ title: `${wooRows.length} linhas exportadas para Excel WooCommerce (${productsToExport.length} produtos + variações)!` });
   };
 
   const renderCell = (product: Product, field: keyof Product, maxW?: string) => {

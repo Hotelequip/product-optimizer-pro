@@ -42,6 +42,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
   const { data: catalogs = [] } = useCatalogs();
   const { data: categories = [] } = useCategories();
   const { data: allVariations = [] } = useAllVariations();
+  const { data: wooStores = [] } = useWooStores();
   const { toast } = useToast();
   const [editingCell, setEditingCell] = useState<EditableCell | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -53,6 +54,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
   const [selectedProducts, setSelectedProducts] = useState<Set<string>>(new Set());
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const [syncingWoo, setSyncingWoo] = useState(false);
 
   const setFilter = (col: string, value: string) => {
     setColumnFilters(prev => {

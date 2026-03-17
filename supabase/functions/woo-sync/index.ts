@@ -453,6 +453,18 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'sync_categories') {
+      // Decode HTML entities from WooCommerce (e.g. &amp; &gt; &lt; &#039;)
+      const decodeHtml = (text: string): string => {
+        return text
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&quot;/g, '"')
+          .replace(/&#0?39;/g, "'")
+          .replace(/&#x27;/g, "'")
+          .replace(/&#(\d+);/g, (_m, code) => String.fromCharCode(Number(code)));
+      };
+
       // Fetch ALL WooCommerce categories with hierarchy
       let wooAllCategories: any[] = [];
       let catPage = 1;
@@ -502,7 +514,7 @@ Deno.serve(async (req) => {
       const toUpdate: Array<{ id: string; slug: string | null; woo_id: number }> = [];
 
       for (const wooCat of validWooCategories) {
-        const name = String(wooCat.name || '').trim();
+        const name = decodeHtml(String(wooCat.name || '').trim());
         const wooId = Number(wooCat.id);
         const slug = String(wooCat.slug || '').trim() || null;
 

@@ -16,6 +16,12 @@ import { cn } from "@/lib/utils";
 
 type SyncPhase = "idle" | "fetching" | "saving" | "done" | "error";
 
+/** Decode HTML entities for display (handles data already stored with encoding) */
+function decodeHtmlEntities(text: string): string {
+  const doc = new DOMParser().parseFromString(text, "text/html");
+  return doc.documentElement.textContent || text;
+}
+
 interface TreeNode {
   category: Category;
   children: TreeNode[];
@@ -95,7 +101,7 @@ function CategoryTreeItem({
 
         <span className={cn("text-sm flex-1 cursor-pointer", hasChildren && "font-medium")}
           onClick={() => hasChildren && toggleExpand(node.category.id)}>
-          {node.category.name}
+          {decodeHtmlEntities(node.category.name)}
         </span>
 
         {node.category.slug && (

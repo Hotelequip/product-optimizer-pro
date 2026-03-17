@@ -792,7 +792,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
                 } catch {}
                 setBulkProgress(prev => ({ ...prev, current: prev.current + 1 }));
               }
-              toast({ title: `${approved} produtos aprovados!` });
+              toast({ title: `${approved} produtos aprovados para envio ao WooCommerce!` });
               setBulkProgress({ current: 0, total: 0, label: "" });
               setSelectedProducts(new Set());
             }}>

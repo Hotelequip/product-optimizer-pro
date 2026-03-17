@@ -531,6 +531,7 @@ export default function Catalog() {
           if (!name) return null;
 
           const stockRaw = parseNum(findVal(row, ["stock", "estoque", "qty", "quantidade", "std", "units"]));
+          const categoryName = extractPrimaryCategoryName(findField(row, "categories"));
 
           return {
             user_id: user.id,
@@ -545,6 +546,7 @@ export default function Catalog() {
             brand: findVal(row, ["brand", "marca"]) || null,
             image_url: findVal(row, ["image url", "image_url", "imagens", "imagem", "image", "images", "foto", "photo", "thumbnail"]) || null,
             supplier_url: findVal(row, ["supplier_url", "supplier url", "fornecedor_url", "fornecedor url", "link fornecedor"]) || null,
+            category_name: categoryName || null,
             status: "draft",
             catalog_id: catalogId,
           };
@@ -564,7 +566,61 @@ export default function Catalog() {
         throw new Error("Nenhuma linha válida encontrada para importar.");
       }
 
-      const imported = await insertProductsInBatches(deduped);
+      const categoryNames = Array.from(new Set(
+        deduped
+          .map((p) => extractPrimaryCategoryName(p.category_name))
+          .filter(Boolean)
+      ));
+
+      const categoryIdByName = new Map<string, string>();
+      if (categoryNames.length > 0) {
+        const { data: existingCategories, error: existingCategoriesError } = await supabase
+          .from("categories")
+          .select("id, name")
+          .eq("user_id", user.id);
+
+        if (existingCategoriesError) {
+          throw new Error(`Erro ao carregar categorias: ${existingCategoriesError.message}`);
+        }
+
+        for (const c of existingCategories || []) {
+          categoryIdByName.set(normalizeLookupKey(c.name), c.id);
+        }
+
+        const missingCategoryNames = categoryNames.filter(
+          (name) => !categoryIdByName.has(normalizeLookupKey(name))
+        );
+
+        if (missingCategoryNames.length > 0) {
+          const { data: createdCategories, error: createCategoriesError } = await supabase
+            .from("categories")
+            .insert(missingCategoryNames.map((name) => ({ name, user_id: user.id })))
+            .select("id, name");
+
+          if (createCategoriesError) {
+            throw new Error(`Erro ao criar categorias: ${createCategoriesError.message}`);
+          }
+
+          for (const c of createdCategories || []) {
+            categoryIdByName.set(normalizeLookupKey(c.name), c.id);
+          }
+        }
+      }
+
+      const payloadToInsert = deduped.map((product) => {
+        const resolvedCategoryName = extractPrimaryCategoryName(product.category_name);
+        const resolvedCategoryId = resolvedCategoryName
+          ? (categoryIdByName.get(normalizeLookupKey(resolvedCategoryName)) ?? null)
+          : null;
+
+        const { category_name, ...baseProduct } = product;
+        return {
+          ...baseProduct,
+          category_id: resolvedCategoryId,
+        };
+      });
+
+      const imported = await insertProductsInBatches(payloadToInsert);
       await attachImportedFile(file, catalogId, "excel");
 
       await Promise.all([

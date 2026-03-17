@@ -482,12 +482,38 @@ export default function Catalog() {
     }
 
     const categoryIdByNameKey = new Map<string, string>();
-    for (const category of existingCategories || []) {
+    const existingList = existingCategories || [];
+
+    // Build exact-match map
+    for (const category of existingList) {
       categoryIdByNameKey.set(normalizeLookupKey(category.name), category.id);
     }
 
-    // Only map to existing categories — do NOT auto-create categories from import files.
-    // Categories should be managed via WooCommerce sync or manual creation.
+    // For desired categories not found by exact match, try partial/fuzzy matching
+    for (const [desiredKey, _desiredName] of desiredByKey.entries()) {
+      if (categoryIdByNameKey.has(desiredKey)) continue; // already matched
+
+      // Try: existing category name CONTAINS the desired key, or vice versa
+      let bestMatch: { id: string; score: number } | null = null;
+      for (const cat of existingList) {
+        const existingKey = normalizeLookupKey(cat.name);
+        if (!existingKey) continue;
+
+        // Exact containment in either direction
+        if (existingKey.includes(desiredKey) || desiredKey.includes(existingKey)) {
+          const score = Math.min(desiredKey.length, existingKey.length) / Math.max(desiredKey.length, existingKey.length);
+          if (!bestMatch || score > bestMatch.score) {
+            bestMatch = { id: cat.id, score };
+          }
+        }
+      }
+      // Only accept if similarity is reasonable (> 50%)
+      if (bestMatch && bestMatch.score > 0.5) {
+        categoryIdByNameKey.set(desiredKey, bestMatch.id);
+      }
+    }
+
+    // Do NOT auto-create categories — only map to existing ones.
     return categoryIdByNameKey;
   };
 

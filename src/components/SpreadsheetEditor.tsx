@@ -222,7 +222,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
     }
 
     const { data: linkedFiles, error: filesError } = await supabase
-      .from("catalog_files" as any)
+      .from("catalog_files")
       .select("file_name, file_url, file_type, catalog_id, created_at")
       .in("catalog_id", catalogIds)
       .order("created_at", { ascending: false });

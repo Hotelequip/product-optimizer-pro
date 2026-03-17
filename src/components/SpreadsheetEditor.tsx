@@ -655,7 +655,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
   };
 
   const getStatusBadge = (product: Product) => {
-    const labels: Record<string, string> = { active: "Publicado", inactive: "Inativo", draft: "Pendente" };
+    const labels: Record<string, string> = { active: "Aprovado", inactive: "Inativo", draft: "Pendente" };
     const colors: Record<string, string> = {
       active: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
       inactive: "bg-muted text-muted-foreground",

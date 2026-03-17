@@ -266,6 +266,37 @@ Deno.serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    if (action === 'discover') {
+      // Discover product attributes and taxonomies for brand mapping
+      const results: any = {};
+      try {
+        const attrRes = await fetch(`${baseUrl}/wp-json/wc/v3/products/attributes`, {
+          headers: { 'Authorization': `Basic ${encodedCredentials}`, 'Content-Type': 'application/json' },
+        });
+        if (attrRes.ok) results.attributes = await attrRes.json();
+      } catch (e) { results.attributes_error = String(e); }
+
+      // Check for existing product to see how brand appears
+      try {
+        const prodRes = await fetch(`${baseUrl}/wp-json/wc/v3/products?per_page=5`, {
+          headers: { 'Authorization': `Basic ${encodedCredentials}`, 'Content-Type': 'application/json' },
+        });
+        if (prodRes.ok) {
+          const prods = await prodRes.json();
+          results.sample_products = prods.map((p: any) => ({
+            id: p.id, name: p.name, 
+            attributes: p.attributes,
+            meta_data: p.meta_data?.filter((m: any) => 
+              ['_brand', 'marca_do_produto', '_wc_brand', 'pwb-brand', 'brand'].some(k => m.key.toLowerCase().includes(k))
+            ),
+          }));
+        }
+      } catch (e) { results.products_error = String(e); }
+
+      return new Response(JSON.stringify({ success: true, ...results }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     if (action === 'test') {
       // Test connection
       const response = await fetch(`${baseUrl}/wp-json/wc/v3/system_status`, {

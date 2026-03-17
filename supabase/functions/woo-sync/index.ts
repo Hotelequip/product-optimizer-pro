@@ -325,34 +325,17 @@ Deno.serve(async (req) => {
       for (let i = 0; i < products.length; i += BATCH_SIZE) {
         const batch = products.slice(i, i + BATCH_SIZE);
 
-        // Identify products without category in this batch
+        // Identify products still without a valid mapped Woo category (even if source category exists)
         const needsCategory = batch.filter((p: any) => {
-          const hasCatName = String(p?.category_name ?? '').trim().length > 0;
-          const hasCatId = String(p?.category_id ?? '').trim().length > 0 && categoryNameById.has(String(p?.category_id ?? ''));
-          return !hasCatName && !hasCatId;
+          const sourceCategory = getResolvedSourceCategoryName(p);
+          return !findWooCategory(sourceCategory);
         });
 
-        // Use AI to suggest categories for products that don't have one
+        // Use AI to suggest EXISTING Woo categories for unmapped products
         if (needsCategory.length > 0) {
           const suggestions = await suggestCategoriesForBatch(needsCategory);
           for (const [key, catName] of suggestions) {
             aiCategoryCache.set(key, catName);
-          }
-        }
-
-        // Resolve categories for this batch
-        const categoryMap = new Map<string, number>();
-        for (const p of batch) {
-          const resolvedCategoryName = String(
-            p?.category_name
-            ?? categoryNameById.get(String(p?.category_id ?? ''))
-            ?? aiCategoryCache.get(normalizeKey(p.sku || p.name))
-            ?? ''
-          ).trim();
-
-          if (resolvedCategoryName && !categoryMap.has(resolvedCategoryName)) {
-            const catId = findWooCategory(resolvedCategoryName);
-            if (catId) categoryMap.set(resolvedCategoryName, catId);
           }
         }
 

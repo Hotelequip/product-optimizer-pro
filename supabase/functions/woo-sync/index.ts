@@ -225,7 +225,7 @@ Deno.serve(async (req) => {
               model: 'google/gemini-2.5-flash-lite',
               messages: [{
                 role: 'user',
-                content: `You are a product categorization expert. Given these WooCommerce store categories:\n${wooCategoryNames.join(', ')}\n\nAssign the BEST matching category to each product below. Reply ONLY with a JSON array of objects: [{"index":1,"category":"exact category name"},...]\nIf no good match exists, use the closest parent category.\n\nProducts:\n${productList}`
+                content: `You are a product categorization expert. Given ONLY these existing WooCommerce store categories:\n${wooCategoryNames.join(', ')}\n\nAssign the BEST matching EXISTING category to each product below. You MUST ONLY use categories from the list above — NEVER invent or create new category names. Reply ONLY with a JSON array of objects: [{"index":1,"category":"exact category name from list"},...]\n\nProducts:\n${productList}`
               }],
               temperature: 0.1,
               max_tokens: 2000,

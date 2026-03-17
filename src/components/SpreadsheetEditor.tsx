@@ -807,46 +807,39 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
                   if (selected.length === 0) return;
                   setSyncingWoo(true);
                   setBulkEnriching(true);
-                  const BATCH_SIZE = 10;
                   const totalProducts = selected.length;
-                  let sent = 0;
-                  let errors = 0;
                   setBulkProgress({ current: 0, total: totalProducts, label: "WooCommerce" });
                   try {
                     const fileHintsByLookupKey = await buildCatalogFileHints(selected);
+                    setBulkProgress({ current: 0, total: totalProducts, label: "WooCommerce – Enviando..." });
 
-                    for (let i = 0; i < totalProducts; i += BATCH_SIZE) {
-                      const batch = selected.slice(i, i + BATCH_SIZE).map((p) => {
-                        const skuKey = normalizeLookupKey(p.sku);
-                        const nameKey = normalizeLookupKey(p.name);
-                        const fileHint = (skuKey && fileHintsByLookupKey.get(skuKey)) || (nameKey && fileHintsByLookupKey.get(nameKey));
+                    // Send ALL products in a single edge function call (the backend handles internal batching)
+                    const allMapped = selected.map((p) => {
+                      const skuKey = normalizeLookupKey(p.sku);
+                      const nameKey = normalizeLookupKey(p.name);
+                      const fileHint = (skuKey && fileHintsByLookupKey.get(skuKey)) || (nameKey && fileHintsByLookupKey.get(nameKey));
+                      return {
+                        ...p,
+                        brand: p.brand || fileHint?.brand || null,
+                        category_name: categories.find((c) => c.id === p.category_id)?.name || fileHint?.category_name || null,
+                      };
+                    });
 
-                        return {
-                          ...p,
-                          brand: p.brand || fileHint?.brand || null,
-                          category_name: categories.find((c) => c.id === p.category_id)?.name || fileHint?.category_name || null,
-                        };
-                      });
+                    const { data, error } = await supabase.functions.invoke("woo-sync", {
+                      body: { action: "export", store_id: storeId, products: allMapped },
+                    });
 
-                      const { data, error } = await supabase.functions.invoke("woo-sync", {
-                        body: { action: "export", store_id: storeId, products: batch },
-                      });
-                      if (error) {
-                        errors += batch.length;
-                      } else if (data?.success) {
-                        const created = data.results?.reduce((sum: number, r: any) => sum + (r.created || 0), 0) || 0;
-                        const updated = data.results?.reduce((sum: number, r: any) => sum + (r.updated || 0), 0) || 0;
-                        sent += created + updated;
-                      } else {
-                        errors += batch.length;
-                      }
-                      setBulkProgress({ current: Math.min(i + BATCH_SIZE, totalProducts), total: totalProducts, label: "WooCommerce" });
-                    }
-                    if (sent > 0) {
-                      toast({ title: `${sent} produtos criados/atualizados no WooCommerce!` });
-                    }
-                    if (errors > 0) {
-                      toast({ title: `${errors} produtos falharam`, variant: "destructive" });
+                    setBulkProgress({ current: totalProducts, total: totalProducts, label: "WooCommerce" });
+
+                    if (error) {
+                      toast({ title: "Erro na sincronização", description: error.message, variant: "destructive" });
+                    } else if (data?.success) {
+                      const sent = data.results?.reduce((sum: number, r: any) => sum + (r.created || 0) + (r.updated || 0), 0) || 0;
+                      const failed = data.results?.reduce((sum: number, r: any) => sum + (r.error ? 1 : 0), 0) || 0;
+                      if (sent > 0) toast({ title: `${sent} produtos criados/atualizados no WooCommerce!` });
+                      if (failed > 0) toast({ title: `${failed} lotes falharam`, variant: "destructive" });
+                    } else {
+                      toast({ title: "Erro", description: data?.error || "Falha desconhecida", variant: "destructive" });
                     }
                   } catch (e: any) {
                     toast({ title: "Erro", description: e.message, variant: "destructive" });

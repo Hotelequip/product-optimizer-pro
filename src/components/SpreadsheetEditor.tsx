@@ -259,7 +259,9 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
 
     let XLSX: any = null;
 
-    for (const file of linkedFiles as Array<{ file_name: string; file_url: string; file_type: string }>) {
+    const typedLinkedFiles = linkedFiles as unknown as Array<{ file_name: string; file_url: string; file_type: string }>;
+
+    for (const file of typedLinkedFiles) {
       const ext = file.file_name.split(".").pop()?.toLowerCase() || "";
       const isSpreadsheet = file.file_type === "excel" || ext === "csv" || ext === "xlsx" || ext === "xls";
       if (!isSpreadsheet) continue;
@@ -297,9 +299,9 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
 
         for (const sheetName of workbook.SheetNames) {
           const worksheet = workbook.Sheets[sheetName];
-          const allRows = XLSX.utils.sheet_to_json<unknown[]>(worksheet, { header: 1, defval: "" });
-          const headerRowIdx = detectHeaderRowIndex(allRows as unknown[][]);
-          const jsonRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: "", range: headerRowIdx });
+          const allRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" }) as unknown[][];
+          const headerRowIdx = detectHeaderRowIndex(allRows);
+          const jsonRows = XLSX.utils.sheet_to_json(worksheet, { defval: "", range: headerRowIdx }) as Array<Record<string, unknown>>;
 
           for (const rawRow of jsonRows) {
             const row: Record<string, string> = {};

@@ -155,6 +155,7 @@ export default function Categories() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState("");
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [lastSyncedStoreId, setLastSyncedStoreId] = useState<string | null>(null);
   const progressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const activeStores = wooStores.filter(s => s.is_active);

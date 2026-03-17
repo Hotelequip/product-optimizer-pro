@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Trash2, RefreshCw, Loader2, CheckCircle2, X, ChevronRight, ChevronDown, Folder, FolderOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -23,11 +24,9 @@ interface TreeNode {
 function buildTree(categories: Category[]): TreeNode[] {
   const map = new Map<string, TreeNode>();
   const roots: TreeNode[] = [];
-
   for (const cat of categories) {
     map.set(cat.id, { category: cat, children: [] });
   }
-
   for (const cat of categories) {
     const node = map.get(cat.id)!;
     if (cat.parent_id && map.has(cat.parent_id)) {
@@ -36,52 +35,53 @@ function buildTree(categories: Category[]): TreeNode[] {
       roots.push(node);
     }
   }
-
-  // Sort children alphabetically
   const sortNodes = (nodes: TreeNode[]) => {
     nodes.sort((a, b) => a.category.name.localeCompare(b.category.name));
     for (const n of nodes) sortNodes(n.children);
   };
   sortNodes(roots);
-
   return roots;
 }
 
+function collectAllIds(node: TreeNode): string[] {
+  return [node.category.id, ...node.children.flatMap(collectAllIds)];
+}
+
 function CategoryTreeItem({
-  node,
-  depth,
-  expandedIds,
-  toggleExpand,
+  node, depth, expandedIds, toggleExpand, selectedIds, toggleSelect,
   onDelete,
 }: {
   node: TreeNode;
   depth: number;
   expandedIds: Set<string>;
   toggleExpand: (id: string) => void;
+  selectedIds: Set<string>;
+  toggleSelect: (id: string, withChildren: boolean) => void;
   onDelete: (id: string) => void;
 }) {
   const hasChildren = node.children.length > 0;
   const isExpanded = expandedIds.has(node.category.id);
+  const isSelected = selectedIds.has(node.category.id);
 
   return (
     <>
       <div
         className={cn(
-          "flex items-center gap-2 py-2 px-3 hover:bg-muted/50 rounded-md group transition-colors",
-          depth > 0 && "border-l border-border"
+          "flex items-center gap-2 py-1.5 px-3 hover:bg-muted/50 rounded-md group transition-colors",
+          depth > 0 && "border-l border-border",
+          isSelected && "bg-primary/5"
         )}
         style={{ marginLeft: depth * 24 }}
       >
+        <Checkbox
+          checked={isSelected}
+          onCheckedChange={() => toggleSelect(node.category.id, false)}
+          className="h-3.5 w-3.5"
+        />
+
         {hasChildren ? (
-          <button
-            onClick={() => toggleExpand(node.category.id)}
-            className="p-0.5 rounded hover:bg-accent"
-          >
-            {isExpanded ? (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            )}
+          <button onClick={() => toggleExpand(node.category.id)} className="p-0.5 rounded hover:bg-accent">
+            {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
           </button>
         ) : (
           <span className="w-5" />
@@ -93,28 +93,22 @@ function CategoryTreeItem({
           <Folder className="h-4 w-4 text-muted-foreground flex-shrink-0" />
         )}
 
-        <span className={cn("text-sm flex-1", hasChildren && "font-medium")}>
+        <span className={cn("text-sm flex-1 cursor-pointer", hasChildren && "font-medium")}
+          onClick={() => hasChildren && toggleExpand(node.category.id)}>
           {node.category.name}
         </span>
 
         {node.category.slug && (
-          <span className="text-xs text-muted-foreground font-mono hidden md:inline">
-            /{node.category.slug}
-          </span>
+          <span className="text-xs text-muted-foreground font-mono hidden md:inline">/{node.category.slug}</span>
         )}
 
         {hasChildren && (
-          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-            {node.children.length}
-          </Badge>
+          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{node.children.length}</Badge>
         )}
 
-        <Button
-          variant="ghost"
-          size="icon"
+        <Button variant="ghost" size="icon"
           className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-          onClick={() => onDelete(node.category.id)}
-        >
+          onClick={() => onDelete(node.category.id)}>
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </div>
@@ -128,6 +122,8 @@ function CategoryTreeItem({
               depth={depth + 1}
               expandedIds={expandedIds}
               toggleExpand={toggleExpand}
+              selectedIds={selectedIds}
+              toggleSelect={toggleSelect}
               onDelete={onDelete}
             />
           ))}
@@ -150,7 +146,9 @@ export default function Categories() {
   const [syncLabel, setSyncLabel] = useState("");
   const [syncResult, setSyncResult] = useState<{ created: number; skipped: number; total_woo: number } | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState("");
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const progressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const activeStores = wooStores.filter(s => s.is_active);
@@ -166,12 +164,9 @@ export default function Categories() {
     if (!searchTerm.trim()) return tree;
     const term = searchTerm.toLowerCase();
     const matchingIds = new Set<string>();
-
-    // Find all matching categories and their ancestors
     for (const cat of categories) {
       if (cat.name.toLowerCase().includes(term) || (cat.slug && cat.slug.includes(term))) {
         matchingIds.add(cat.id);
-        // Add all ancestors
         let parentId = cat.parent_id;
         while (parentId) {
           matchingIds.add(parentId);
@@ -180,29 +175,57 @@ export default function Categories() {
         }
       }
     }
-
     const filterNodes = (nodes: TreeNode[]): TreeNode[] =>
-      nodes
-        .filter(n => matchingIds.has(n.category.id))
-        .map(n => ({ ...n, children: filterNodes(n.children) }));
-
+      nodes.filter(n => matchingIds.has(n.category.id)).map(n => ({ ...n, children: filterNodes(n.children) }));
     return filterNodes(tree);
   }, [tree, categories, searchTerm]);
 
-  // Count root vs total
   const rootCount = tree.length;
   const totalCount = categories.length;
 
   const toggleExpand = (id: string) => {
-    setExpandedIds(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+    setExpandedIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
   };
 
+  const toggleSelect = (id: string, _withChildren: boolean) => {
+    setSelectedIds(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
+  };
+
+  const selectAll = () => setSelectedIds(new Set(categories.map(c => c.id)));
+  const deselectAll = () => setSelectedIds(new Set());
   const expandAll = () => setExpandedIds(new Set(categories.filter(c => categories.some(ch => ch.parent_id === c.id)).map(c => c.id)));
   const collapseAll = () => setExpandedIds(new Set());
+
+  const bulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    const count = selectedIds.size;
+    if (!confirm(`Tem a certeza que quer eliminar ${count} categoria(s)?`)) return;
+    setBulkDeleting(true);
+    try {
+      // Delete in batches to avoid issues with children references
+      const ids = Array.from(selectedIds);
+      // Delete children first (those whose parent_id is also being deleted)
+      const childrenFirst = ids.sort((a, b) => {
+        const aIsChild = categories.find(c => c.id === a)?.parent_id ? 1 : 0;
+        const bIsChild = categories.find(c => c.id === b)?.parent_id ? 1 : 0;
+        return bIsChild - aIsChild; // children first
+      });
+
+      const BATCH = 50;
+      for (let i = 0; i < childrenFirst.length; i += BATCH) {
+        const batch = childrenFirst.slice(i, i + BATCH);
+        const { error } = await supabase.from("categories").delete().in("id", batch);
+        if (error) throw error;
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["categories"] });
+      toast({ title: `${count} categorias eliminadas!` });
+      setSelectedIds(new Set());
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+    setBulkDeleting(false);
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -216,7 +239,6 @@ export default function Categories() {
     setSyncProgress(0);
     setSyncResult(null);
     setSyncLabel("A buscar categorias do WooCommerce...");
-
     let fakeProgress = 0;
     if (progressTimer.current) clearInterval(progressTimer.current);
     progressTimer.current = setInterval(() => {
@@ -228,27 +250,19 @@ export default function Categories() {
       const { data, error } = await supabase.functions.invoke("woo-sync", {
         body: { action: "sync_categories", store_id: storeId },
       });
-
       if (progressTimer.current) clearInterval(progressTimer.current);
-
       if (error) throw error;
-
       if (data.success) {
         setSyncPhase("saving");
         setSyncProgress(90);
         setSyncLabel(`A guardar ${data.created} novas categorias...`);
         await new Promise(r => setTimeout(r, 500));
-
         setSyncProgress(100);
-        setSyncLabel(`Concluído! ${data.created} novas, ${data.skipped} existentes`);
+        setSyncLabel(`Concluído! ${data.created} novas, ${data.skipped} atualizadas/existentes`);
         setSyncResult({ created: data.created, skipped: data.skipped, total_woo: data.total_woo });
         setSyncPhase("done");
         queryClient.invalidateQueries({ queryKey: ["categories"] });
-
-        toast({
-          title: `Sincronização concluída!`,
-          description: `${data.created} novas categorias importadas de ${data.total_woo} no WooCommerce.`,
-        });
+        toast({ title: `Sincronização concluída!`, description: `${data.created} novas, ${data.skipped} atualizadas. Total WooCommerce: ${data.total_woo}` });
       } else {
         setSyncPhase("error");
         setSyncLabel(data.error || "Erro desconhecido");
@@ -262,11 +276,7 @@ export default function Categories() {
     }
   };
 
-  const dismissSync = () => {
-    setSyncPhase("idle");
-    setSyncProgress(0);
-    setSyncLabel("");
-  };
+  const dismissSync = () => { setSyncPhase("idle"); setSyncProgress(0); setSyncLabel(""); };
 
   return (
     <div className="space-y-6">
@@ -277,13 +287,11 @@ export default function Categories() {
             {totalCount} categoria(s) — {rootCount} raíz, {totalCount - rootCount} subcategorias
           </p>
         </div>
-
         {activeStores.length > 0 && (
           <div className="flex items-center gap-2">
             {syncResult && syncPhase === "done" && (
               <Badge variant="outline" className="gap-1 text-xs">
-                <CheckCircle2 className="h-3 w-3" />
-                +{syncResult.created} novas
+                <CheckCircle2 className="h-3 w-3" />+{syncResult.created} novas
               </Badge>
             )}
             <Select onValueChange={syncFromWoo} disabled={syncing}>
@@ -294,16 +302,13 @@ export default function Categories() {
                 </div>
               </SelectTrigger>
               <SelectContent>
-                {activeStores.map(s => (
-                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                ))}
+                {activeStores.map(s => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
               </SelectContent>
             </Select>
           </div>
         )}
       </div>
 
-      {/* Sync progress bar */}
       {syncPhase !== "idle" && (
         <Card className="border-primary/20">
           <CardContent className="py-4 space-y-2">
@@ -315,9 +320,7 @@ export default function Categories() {
                 <span className="font-medium">{syncLabel}</span>
               </div>
               {(syncPhase === "done" || syncPhase === "error") && (
-                <Button variant="ghost" size="sm" onClick={dismissSync} className="h-6 px-2 text-xs">
-                  Fechar
-                </Button>
+                <Button variant="ghost" size="sm" onClick={dismissSync} className="h-6 px-2 text-xs">Fechar</Button>
               )}
             </div>
             <Progress value={syncProgress} className="h-2" />
@@ -325,7 +328,7 @@ export default function Categories() {
               <span>
                 {syncPhase === "fetching" && "A comunicar com o WooCommerce..."}
                 {syncPhase === "saving" && "A guardar no sistema..."}
-                {syncPhase === "done" && syncResult && `${syncResult.total_woo} categorias no WooCommerce · ${syncResult.created} novas · ${syncResult.skipped} existentes`}
+                {syncPhase === "done" && syncResult && `${syncResult.total_woo} no WooCommerce · ${syncResult.created} novas · ${syncResult.skipped} atualizadas`}
                 {syncPhase === "error" && "A sincronização falhou"}
               </span>
               <span>{Math.round(syncProgress)}%</span>
@@ -335,15 +338,11 @@ export default function Categories() {
       )}
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Nova Categoria</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle className="text-lg">Nova Categoria</CardTitle></CardHeader>
         <CardContent>
           <form onSubmit={handleCreate} className="flex gap-3">
             <Input placeholder="Nome da categoria" value={name} onChange={(e) => setName(e.target.value)} className="max-w-sm" />
-            <Button type="submit" disabled={createCategory.isPending}>
-              <Plus className="mr-2 h-4 w-4" />Criar
-            </Button>
+            <Button type="submit" disabled={createCategory.isPending}><Plus className="mr-2 h-4 w-4" />Criar</Button>
           </form>
         </CardContent>
       </Card>
@@ -359,24 +358,24 @@ export default function Categories() {
             </p>
           ) : (
             <div className="space-y-3">
-              {/* Controls */}
-              <div className="flex items-center gap-3">
-                <Input
-                  placeholder="Pesquisar categorias..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="max-w-xs h-8 text-sm"
-                />
-                <Button variant="ghost" size="sm" onClick={expandAll} className="text-xs h-7">
-                  Expandir tudo
-                </Button>
-                <Button variant="ghost" size="sm" onClick={collapseAll} className="text-xs h-7">
-                  Colapsar tudo
-                </Button>
+              <div className="flex items-center gap-3 flex-wrap">
+                <Input placeholder="Pesquisar categorias..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="max-w-xs h-8 text-sm" />
+                <Button variant="ghost" size="sm" onClick={expandAll} className="text-xs h-7">Expandir tudo</Button>
+                <Button variant="ghost" size="sm" onClick={collapseAll} className="text-xs h-7">Colapsar tudo</Button>
+                <div className="ml-auto flex items-center gap-2">
+                  <Button variant="ghost" size="sm" onClick={selectedIds.size === categories.length ? deselectAll : selectAll} className="text-xs h-7">
+                    {selectedIds.size === categories.length ? "Desselecionar tudo" : "Selecionar tudo"}
+                  </Button>
+                  {selectedIds.size > 0 && (
+                    <Button variant="destructive" size="sm" onClick={bulkDelete} disabled={bulkDeleting} className="text-xs h-7 gap-1">
+                      {bulkDeleting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                      Eliminar {selectedIds.size} selecionada(s)
+                    </Button>
+                  )}
+                </div>
               </div>
 
-              {/* Tree */}
-              <div className="border rounded-lg divide-y-0 py-1">
+              <div className="border rounded-lg py-1">
                 {filteredTree.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-4">Nenhuma categoria encontrada</p>
                 ) : (
@@ -387,6 +386,8 @@ export default function Categories() {
                       depth={0}
                       expandedIds={expandedIds}
                       toggleExpand={toggleExpand}
+                      selectedIds={selectedIds}
+                      toggleSelect={toggleSelect}
                       onDelete={(id) => deleteCategory.mutate(id)}
                     />
                   ))

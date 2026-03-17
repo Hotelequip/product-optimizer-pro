@@ -194,6 +194,129 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
     });
   }, [products, columnFilters, categories]);
 
+  const buildCatalogFileHints = async (selected: Product[]) => {
+    const hintsByLookupKey = new Map<string, FileDerivedHints>();
+
+    const targetSkuKeys = new Set(
+      selected
+        .map((p) => normalizeLookupKey(p.sku))
+        .filter(Boolean),
+    );
+
+    const targetNameKeys = new Set(
+      selected
+        .map((p) => normalizeLookupKey(p.name))
+        .filter(Boolean),
+    );
+
+    const catalogIds = Array.from(
+      new Set(
+        selected
+          .map((p) => p.catalog_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
+
+    if ((targetSkuKeys.size === 0 && targetNameKeys.size === 0) || catalogIds.length === 0) {
+      return hintsByLookupKey;
+    }
+
+    const { data: linkedFiles, error: filesError } = await supabase
+      .from("catalog_files" as any)
+      .select("file_name, file_url, file_type, catalog_id, created_at")
+      .in("catalog_id", catalogIds)
+      .order("created_at", { ascending: false });
+
+    if (filesError || !linkedFiles || linkedFiles.length === 0) {
+      return hintsByLookupKey;
+    }
+
+    const processRow = (row: Record<string, string>) => {
+      const sku = findFileField(row, "sku");
+      const name = findFileField(row, "name");
+      const skuKey = normalizeLookupKey(sku);
+      const nameKey = normalizeLookupKey(name);
+      const shouldUseSku = Boolean(skuKey) && targetSkuKeys.has(skuKey);
+      const shouldUseName = Boolean(nameKey) && targetNameKeys.has(nameKey);
+
+      if (!shouldUseSku && !shouldUseName) return;
+
+      const categoryName = extractPrimaryCategoryName(findFileField(row, "categories")) || null;
+      const brandName = findFileField(row, "brand") || null;
+
+      if (!categoryName && !brandName) return;
+
+      const incomingHint: FileDerivedHints = { category_name: categoryName, brand: brandName };
+
+      if (shouldUseSku && skuKey) {
+        hintsByLookupKey.set(skuKey, mergeHint(hintsByLookupKey.get(skuKey), incomingHint));
+      }
+
+      if (shouldUseName && nameKey) {
+        hintsByLookupKey.set(nameKey, mergeHint(hintsByLookupKey.get(nameKey), incomingHint));
+      }
+    };
+
+    let XLSX: any = null;
+
+    for (const file of linkedFiles as Array<{ file_name: string; file_url: string; file_type: string }>) {
+      const ext = file.file_name.split(".").pop()?.toLowerCase() || "";
+      const isSpreadsheet = file.file_type === "excel" || ext === "csv" || ext === "xlsx" || ext === "xls";
+      if (!isSpreadsheet) continue;
+
+      try {
+        const response = await fetch(file.file_url);
+        if (!response.ok) continue;
+
+        if (ext === "csv") {
+          const text = await response.text();
+          const lines = text
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean);
+
+          if (lines.length < 2) continue;
+
+          const delimiter = (lines[0].match(/;/g)?.length ?? 0) > (lines[0].match(/,/g)?.length ?? 0) ? ";" : ",";
+          const headers = parseCsvLine(lines[0], delimiter);
+
+          for (let i = 1; i < lines.length; i++) {
+            const values = parseCsvLine(lines[i], delimiter);
+            const row: Record<string, string> = {};
+            headers.forEach((header, idx) => {
+              row[header] = values[idx] || "";
+            });
+            processRow(row);
+          }
+          continue;
+        }
+
+        XLSX = XLSX || (await import("xlsx"));
+        const buffer = await response.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: "array" });
+
+        for (const sheetName of workbook.SheetNames) {
+          const worksheet = workbook.Sheets[sheetName];
+          const allRows = XLSX.utils.sheet_to_json<unknown[]>(worksheet, { header: 1, defval: "" });
+          const headerRowIdx = detectHeaderRowIndex(allRows as unknown[][]);
+          const jsonRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: "", range: headerRowIdx });
+
+          for (const rawRow of jsonRows) {
+            const row: Record<string, string> = {};
+            Object.keys(rawRow).forEach((key) => {
+              row[String(key).trim()] = String(rawRow[key] ?? "").trim();
+            });
+            processRow(row);
+          }
+        }
+      } catch {
+        // Ignore file-level parsing errors and continue with remaining files.
+      }
+    }
+
+    return hintsByLookupKey;
+  };
+
   const startEdit = (productId: string, field: string, currentValue: any) => {
     setEditingCell({ productId, field });
     setEditValue(String(currentValue ?? ""));

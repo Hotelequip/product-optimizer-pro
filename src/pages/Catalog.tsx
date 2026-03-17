@@ -1837,23 +1837,61 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
         throw new Error("Formato não suportado para extração. Use Excel, CSV ou PDF.");
       }
 
-      // Dedup
+      // Dedup dentro do próprio ficheiro
       const deduped: Array<Record<string, unknown>> = [];
       const seen = new Set<string>();
       for (const p of productsToInsert) {
-        const key = `${String(p.sku ?? "").toLowerCase()}|${String(p.name ?? "").toLowerCase()}`;
-        if (seen.has(key)) continue;
+        const skuKey = normalizeLookupKey(p.sku);
+        const nameKey = normalizeLookupKey(p.name);
+        const key = skuKey ? `sku:${skuKey}` : nameKey ? `name:${nameKey}` : "";
+        if (!key || seen.has(key)) continue;
         seen.add(key);
         deduped.push(p);
       }
 
       if (deduped.length === 0) throw new Error("Nenhum produto encontrado no ficheiro.");
 
+      // Evita inserir produtos já existentes (re-extração do mesmo ficheiro)
+      let existingQuery = supabase
+        .from("products")
+        .select("sku, name")
+        .eq("user_id", user.id);
+
+      if (catalogId) existingQuery = existingQuery.eq("catalog_id", catalogId);
+
+      const { data: existingProducts, error: existingError } = await existingQuery;
+      if (existingError) throw new Error(existingError.message);
+
+      const existingSkuKeys = new Set<string>();
+      const existingNameKeys = new Set<string>();
+      for (const existing of existingProducts || []) {
+        const skuKey = normalizeLookupKey(existing.sku);
+        const nameKey = normalizeLookupKey(existing.name);
+        if (skuKey) existingSkuKeys.add(skuKey);
+        if (nameKey) existingNameKeys.add(nameKey);
+      }
+
+      const toInsert = deduped.filter((p) => {
+        const skuKey = normalizeLookupKey(p.sku);
+        const nameKey = normalizeLookupKey(p.name);
+        const alreadyExists = (skuKey && existingSkuKeys.has(skuKey)) || (nameKey && existingNameKeys.has(nameKey));
+        if (alreadyExists) return false;
+
+        if (skuKey) existingSkuKeys.add(skuKey);
+        if (nameKey) existingNameKeys.add(nameKey);
+        return true;
+      });
+
+      if (toInsert.length === 0) {
+        toast({ title: "Sem novos produtos", description: "Este ficheiro já foi extraído anteriormente para esta pasta." });
+        return;
+      }
+
       // Insert in batches
       const BATCH_SIZE = 100;
       let inserted = 0;
-      for (let i = 0; i < deduped.length; i += BATCH_SIZE) {
-        const chunk = deduped.slice(i, i + BATCH_SIZE);
+      for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
+        const chunk = toInsert.slice(i, i + BATCH_SIZE);
         const { data: result, error: insertErr } = await supabase.from("products").insert(chunk as any).select("id");
         if (insertErr) throw new Error(insertErr.message);
         inserted += result?.length ?? chunk.length;

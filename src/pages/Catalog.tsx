@@ -2045,6 +2045,18 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
 
     setUploading(true);
     try {
+      const alreadyAttached = await findExistingCatalogFile({
+        userId: user.id,
+        catalogId,
+        fileName: file.name,
+        fileSize: file.size,
+      });
+
+      if (alreadyAttached) {
+        toast({ title: "Ficheiro já associado", description: "Este ficheiro já existe nesta pasta." });
+        return;
+      }
+
       const sanitizedName = file.name
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")

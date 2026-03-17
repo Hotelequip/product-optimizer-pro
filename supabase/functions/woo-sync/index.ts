@@ -88,9 +88,35 @@ Deno.serve(async (req) => {
 
       const results: any[] = [];
       const BATCH_SIZE = 50;
+      const normalizeText = (value: unknown) => String(value ?? '').trim().toLowerCase();
+      const normalizeTaxonomyKey = (value: unknown) => normalizeText(value).replace(/^pa_/, '');
+      const normalizeKey = (value: unknown) => normalizeText(value);
 
-      // Pre-fetch existing WooCommerce categories to map by name
+      // Resolve product category names from DB when only category_id is available
+      const categoryNameById = new Map<string, string>();
+      const categoryIds = Array.from(new Set(
+        (products || [])
+          .map((p: any) => String(p?.category_id ?? '').trim())
+          .filter((id) => id.length > 0)
+      ));
+
+      if (categoryIds.length > 0) {
+        const { data: dbCategories, error: dbCategoriesError } = await supabase
+          .from('categories')
+          .select('id, name')
+          .eq('user_id', user.id)
+          .in('id', categoryIds);
+
+        if (!dbCategoriesError && dbCategories) {
+          for (const c of dbCategories) {
+            categoryNameById.set(String(c.id), String(c.name ?? '').trim());
+          }
+        }
+      }
+
+      // Pre-fetch existing WooCommerce categories to map by name/slug
       let wooCategories: any[] = [];
+      const wooCategoryLookup = new Map<string, number>();
       try {
         let catPage = 1;
         let hasMoreCats = true;
@@ -101,6 +127,12 @@ Deno.serve(async (req) => {
           if (catRes.ok) {
             const cats = await catRes.json();
             wooCategories = wooCategories.concat(cats);
+            for (const c of cats) {
+              const nameKey = normalizeText(c?.name);
+              const slugKey = normalizeText(c?.slug);
+              if (nameKey) wooCategoryLookup.set(nameKey, c.id);
+              if (slugKey) wooCategoryLookup.set(slugKey, c.id);
+            }
             hasMoreCats = cats.length === 100;
             catPage++;
           } else { hasMoreCats = false; }
@@ -108,30 +140,61 @@ Deno.serve(async (req) => {
         }
       } catch (e) { console.error('Error fetching WooCommerce categories:', e); }
 
+      const defaultCategoryId =
+        wooCategoryLookup.get('sem categoria') ||
+        wooCategoryLookup.get('uncategorized') ||
+        wooCategories[0]?.id ||
+        null;
+
       // Helper to get or create a WooCommerce category by name
       async function getOrCreateCategory(name: string): Promise<number | null> {
-        if (!name) return null;
-        const existing = wooCategories.find((c: any) => c.name.toLowerCase() === name.toLowerCase());
-        if (existing) return existing.id;
+        const cleaned = String(name ?? '').trim();
+        if (!cleaned) return null;
+
+        const key = normalizeText(cleaned);
+        const existingId = wooCategoryLookup.get(key);
+        if (existingId) return existingId;
+
         try {
           const res = await fetch(`${baseUrl}/wp-json/wc/v3/products/categories`, {
             method: 'POST',
             headers: { 'Authorization': `Basic ${encodedCredentials}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name }),
+            body: JSON.stringify({ name: cleaned }),
           });
           if (res.ok) {
             const newCat = await res.json();
             wooCategories.push(newCat);
+            const nameKey = normalizeText(newCat?.name);
+            const slugKey = normalizeText(newCat?.slug);
+            if (nameKey) wooCategoryLookup.set(nameKey, newCat.id);
+            if (slugKey) wooCategoryLookup.set(slugKey, newCat.id);
             return newCat.id;
           }
         } catch (e) { console.error('Error creating category:', e); }
         return null;
       }
 
+      // Discover global attribute used for brand (if configured in WooCommerce)
+      let brandAttributeId: number | null = null;
+      try {
+        const attrRes = await fetch(`${baseUrl}/wp-json/wc/v3/products/attributes?per_page=100`, {
+          headers: { 'Authorization': `Basic ${encodedCredentials}`, 'Content-Type': 'application/json' },
+        });
+        if (attrRes.ok) {
+          const attrs = await attrRes.json();
+          const brandAttr = attrs.find((a: any) => {
+            const name = normalizeText(a?.name);
+            const slug = normalizeTaxonomyKey(a?.slug);
+            return ['brand', 'marca', 'marca do produto'].includes(name)
+              || ['brand', 'marca', 'marca-do-produto'].includes(slug);
+          });
+          if (brandAttr?.id) brandAttributeId = Number(brandAttr.id);
+        }
+      } catch (e) { console.error('Error fetching WooCommerce attributes:', e); }
+
       // Pre-fetch existing WooCommerce products to match by SKU/slug
       const existingWooProductsBySku = new Map<string, number>();
       const existingWooProductsBySlug = new Map<string, number>();
-      const normalizeKey = (value: unknown) => String(value ?? '').trim().toLowerCase();
 
       try {
         let prodPage = 1;

@@ -302,6 +302,12 @@ export default function Categories() {
                 <CheckCircle2 className="h-3 w-3" />+{syncResult.created} novas
               </Badge>
             )}
+            {lastSyncedStoreId && !syncing && (
+              <Button variant="outline" size="sm" onClick={() => syncFromWoo(lastSyncedStoreId)} className="gap-1.5">
+                <RefreshCw className="h-4 w-4" />
+                Re-sincronizar
+              </Button>
+            )}
             <Select onValueChange={syncFromWoo} disabled={syncing}>
               <SelectTrigger className="w-[220px]">
                 <div className="flex items-center gap-2">

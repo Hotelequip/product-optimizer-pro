@@ -452,6 +452,74 @@ Deno.serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    if (action === 'sync_categories') {
+      // Fetch ALL WooCommerce categories with hierarchy
+      let wooAllCategories: any[] = [];
+      let catPage = 1;
+      let hasMoreCats = true;
+      while (hasMoreCats) {
+        const catRes = await fetch(`${baseUrl}/wp-json/wc/v3/products/categories?per_page=100&page=${catPage}`, {
+          headers: { 'Authorization': `Basic ${encodedCredentials}`, 'Content-Type': 'application/json' },
+        });
+        if (!catRes.ok) {
+          const errText = await catRes.text();
+          return new Response(JSON.stringify({ success: false, error: `Erro ao buscar categorias: ${catRes.status}` }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        const cats = await catRes.json();
+        wooAllCategories = wooAllCategories.concat(cats);
+        hasMoreCats = cats.length === 100;
+        catPage++;
+        if (catPage > 20) break; // safety limit: 2000 categories
+      }
+
+      // Get existing local categories
+      const { data: existingCategories } = await supabase
+        .from('categories')
+        .select('id, name')
+        .eq('user_id', user.id);
+
+      const existingNamesSet = new Set(
+        (existingCategories || []).map((c: any) => c.name.trim().toLowerCase())
+      );
+
+      // Insert only new categories (avoid duplicates)
+      let created = 0;
+      let skipped = 0;
+      for (const wooCat of wooAllCategories) {
+        const name = String(wooCat.name || '').trim();
+        if (!name || name.toLowerCase() === 'uncategorized' || name.toLowerCase() === 'sem categoria') {
+          skipped++;
+          continue;
+        }
+        if (existingNamesSet.has(name.toLowerCase())) {
+          skipped++;
+          continue;
+        }
+        const { error: insertError } = await supabase
+          .from('categories')
+          .insert({ name, user_id: user.id });
+        if (!insertError) {
+          created++;
+          existingNamesSet.add(name.toLowerCase());
+        }
+      }
+
+      return new Response(JSON.stringify({
+        success: true,
+        total_woo: wooAllCategories.length,
+        created,
+        skipped,
+        categories: wooAllCategories.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          slug: c.slug,
+          parent: c.parent,
+          count: c.count,
+        })),
+      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
     if (action === 'discover') {
       // Discover product attributes and taxonomies for brand mapping
       const results: any = {};

@@ -512,6 +512,17 @@ export default function Catalog() {
   };
 
   const attachImportedFile = async (file: File, catalogId: string | null, forcedType?: "excel" | "pdf" | "other") => {
+    if (!user) throw new Error("Sessão expirada.");
+
+    const alreadyAttached = await findExistingCatalogFile({
+      userId: user.id,
+      catalogId,
+      fileName: file.name,
+      fileSize: file.size,
+    });
+
+    if (alreadyAttached) return false;
+
     const storagePath = buildSafeStoragePath(file);
     const { error: uploadErr } = await supabase.storage
       .from("catalog-files")
@@ -532,6 +543,8 @@ export default function Catalog() {
       file_type: fileType,
       file_size: file.size,
     });
+
+    return true;
   };
 
   // Excel/CSV import — assigns to selected catalog

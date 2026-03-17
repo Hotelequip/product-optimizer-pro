@@ -91,6 +91,40 @@ Deno.serve(async (req) => {
       const normalizeText = (value: unknown) => String(value ?? '').trim().toLowerCase();
       const normalizeTaxonomyKey = (value: unknown) => normalizeText(value).replace(/^pa_/, '');
       const normalizeKey = (value: unknown) => normalizeText(value);
+      const normalizeCategoryKey = (value: unknown) => normalizeText(value)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9\s-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const normalizeSlugLike = (value: unknown) => normalizeCategoryKey(value).replace(/\s+/g, '-');
+
+      const splitCategoryCandidates = (value: unknown): string[] => {
+        const raw = String(value ?? '').replace(/<[^>]*>/g, ' ').trim();
+        if (!raw) return [];
+
+        const direct = raw
+          .split(/[;,|]+/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+        const breadcrumbParts = direct.flatMap((item) =>
+          item
+            .split(/[>\/\\›»]+/)
+            .map((s) => s.trim())
+            .filter(Boolean)
+        );
+
+        const preferred = [...breadcrumbParts].reverse(); // leaf first
+        return Array.from(new Set([raw, ...preferred, ...direct]));
+      };
+
+      const getResolvedSourceCategoryName = (p: any) =>
+        String(
+          p?.category_name
+          ?? categoryNameById.get(String(p?.category_id ?? ''))
+          ?? ''
+        ).trim();
 
       // Resolve product category names from DB when only category_id is available
       const categoryNameById = new Map<string, string>();
@@ -117,6 +151,8 @@ Deno.serve(async (req) => {
       // Pre-fetch existing WooCommerce categories to map by name/slug
       let wooCategories: any[] = [];
       const wooCategoryLookup = new Map<string, number>();
+      const wooCategoryEntries: Array<{ id: number; nameKey: string; compactKey: string; slugKey: string; slugLike: string }> = [];
+
       try {
         let catPage = 1;
         let hasMoreCats = true;
@@ -128,10 +164,20 @@ Deno.serve(async (req) => {
             const cats = await catRes.json();
             wooCategories = wooCategories.concat(cats);
             for (const c of cats) {
+              const id = Number(c?.id);
+              if (!Number.isFinite(id)) continue;
+
               const nameKey = normalizeText(c?.name);
+              const compactKey = normalizeCategoryKey(c?.name);
               const slugKey = normalizeText(c?.slug);
-              if (nameKey) wooCategoryLookup.set(nameKey, c.id);
-              if (slugKey) wooCategoryLookup.set(slugKey, c.id);
+              const slugLike = normalizeSlugLike(c?.name);
+
+              if (nameKey) wooCategoryLookup.set(nameKey, id);
+              if (compactKey) wooCategoryLookup.set(compactKey, id);
+              if (slugKey) wooCategoryLookup.set(slugKey, id);
+              if (slugLike) wooCategoryLookup.set(slugLike, id);
+
+              wooCategoryEntries.push({ id, nameKey, compactKey, slugKey, slugLike });
             }
             hasMoreCats = cats.length === 100;
             catPage++;
@@ -140,19 +186,42 @@ Deno.serve(async (req) => {
         }
       } catch (e) { console.error('Error fetching WooCommerce categories:', e); }
 
+      // Lookup existing WooCommerce category by name (NEVER create new ones)
+      function findWooCategory(rawCategory: unknown): number | null {
+        const candidates = splitCategoryCandidates(rawCategory);
+        if (candidates.length === 0) return null;
+
+        for (const candidate of candidates) {
+          const directMatch =
+            wooCategoryLookup.get(normalizeText(candidate))
+            ?? wooCategoryLookup.get(normalizeCategoryKey(candidate))
+            ?? wooCategoryLookup.get(normalizeSlugLike(candidate));
+
+          if (directMatch) return directMatch;
+        }
+
+        for (const candidate of candidates) {
+          const candidateKey = normalizeCategoryKey(candidate);
+          if (candidateKey.length < 4) continue;
+
+          const fuzzy = wooCategoryEntries.find((entry) =>
+            entry.compactKey === candidateKey
+            || entry.slugLike === candidateKey
+            || entry.compactKey.includes(candidateKey)
+            || candidateKey.includes(entry.compactKey)
+          );
+
+          if (fuzzy?.id) return fuzzy.id;
+        }
+
+        return null;
+      }
+
       const defaultCategoryId =
-        wooCategoryLookup.get('sem categoria') ||
-        wooCategoryLookup.get('uncategorized') ||
+        findWooCategory('sem categoria') ||
+        findWooCategory('uncategorized') ||
         wooCategories[0]?.id ||
         null;
-
-      // Lookup existing WooCommerce category by name (NEVER create new ones)
-      function findWooCategory(name: string): number | null {
-        const cleaned = String(name ?? '').trim();
-        if (!cleaned) return null;
-        const key = normalizeText(cleaned);
-        return wooCategoryLookup.get(key) ?? null;
-      }
 
       // Discover global attribute used for brand (if configured in WooCommerce)
       let brandAttributeId: number | null = null;

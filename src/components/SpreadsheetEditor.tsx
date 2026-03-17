@@ -655,7 +655,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
   };
 
   const getStatusBadge = (product: Product) => {
-    const labels: Record<string, string> = { active: "Publicado", inactive: "Inativo", draft: "Pendente" };
+    const labels: Record<string, string> = { active: "Aprovado", inactive: "Inativo", draft: "Pendente" };
     const colors: Record<string, string> = {
       active: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
       inactive: "bg-muted text-muted-foreground",
@@ -792,7 +792,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
                 } catch {}
                 setBulkProgress(prev => ({ ...prev, current: prev.current + 1 }));
               }
-              toast({ title: `${approved} produtos aprovados!` });
+              toast({ title: `${approved} produtos aprovados para envio ao WooCommerce!` });
               setBulkProgress({ current: 0, total: 0, label: "" });
               setSelectedProducts(new Set());
             }}>
@@ -1026,7 +1026,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
                         const slug = slugify(product.optimized_title || product.seo_title || product.name);
                         const score = calcSeoScore(product);
                         updateProduct.mutateAsync({ id: product.id, slug, seo_score: score, status: "active" });
-                        toast({ title: "Produto aprovado!" });
+                        toast({ title: "Produto aprovado para envio ao WooCommerce!" });
                       }} title="Aprovar">
                       <Check className="h-3 w-3" />
                     </Button>

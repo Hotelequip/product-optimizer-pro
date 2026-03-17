@@ -210,10 +210,13 @@ Deno.serve(async (req) => {
           const brand = String(p.brand ?? '').trim();
           if (brand) {
             product.attributes = [
+              { name: 'Marca', visible: true, variation: false, options: [brand] },
               { name: 'Marca Do Produto', visible: true, variation: false, options: [brand] },
             ];
             metaData.push({ key: 'marca_do_produto', value: brand });
             metaData.push({ key: '_brand', value: brand });
+            metaData.push({ key: 'xstore_brand', value: brand });
+            metaData.push({ key: 'brand_id', value: brand });
           }
 
           if (metaData.length > 0) product.meta_data = metaData;

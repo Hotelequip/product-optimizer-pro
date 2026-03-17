@@ -329,10 +329,11 @@ Deno.serve(async (req) => {
           const slug = String(p.slug ?? '').trim();
           if (slug) product.slug = slug;
 
-          // Category (use resolved category, fallback to default Woo category)
+          // Category (use resolved category from file/DB/AI, fallback to default)
           const resolvedCategoryName = String(
             p?.category_name
             ?? categoryNameById.get(String(p?.category_id ?? ''))
+            ?? aiCategoryCache.get(normalizeKey(p.sku || p.name))
             ?? ''
           ).trim();
 

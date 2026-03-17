@@ -221,13 +221,18 @@ Deno.serve(async (req) => {
       for (let i = 0; i < products.length; i += BATCH_SIZE) {
         const batch = products.slice(i, i + BATCH_SIZE);
 
-        // Resolve categories for this batch
+        // Resolve categories for this batch (category_name first, then category_id lookup)
         const categoryMap = new Map<string, number>();
         for (const p of batch) {
-          const catName = p.category_name;
-          if (catName && !categoryMap.has(catName)) {
-            const catId = await getOrCreateCategory(catName);
-            if (catId) categoryMap.set(catName, catId);
+          const resolvedCategoryName = String(
+            p?.category_name
+            ?? categoryNameById.get(String(p?.category_id ?? ''))
+            ?? ''
+          ).trim();
+
+          if (resolvedCategoryName && !categoryMap.has(resolvedCategoryName)) {
+            const catId = await getOrCreateCategory(resolvedCategoryName);
+            if (catId) categoryMap.set(resolvedCategoryName, catId);
           }
         }
 

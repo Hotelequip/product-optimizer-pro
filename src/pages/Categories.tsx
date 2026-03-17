@@ -1,19 +1,141 @@
-import { useState, useEffect, useRef } from "react";
-import { useCategories, useCreateCategory, useDeleteCategory } from "@/hooks/useCategories";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useCategories, useCreateCategory, useDeleteCategory, Category } from "@/hooks/useCategories";
 import { useWooStores } from "@/hooks/useWooStores";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Plus, Trash2, RefreshCw, Loader2, CheckCircle2, X } from "lucide-react";
+import { Plus, Trash2, RefreshCw, Loader2, CheckCircle2, X, ChevronRight, ChevronDown, Folder, FolderOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 
 type SyncPhase = "idle" | "fetching" | "saving" | "done" | "error";
+
+interface TreeNode {
+  category: Category;
+  children: TreeNode[];
+}
+
+function buildTree(categories: Category[]): TreeNode[] {
+  const map = new Map<string, TreeNode>();
+  const roots: TreeNode[] = [];
+
+  for (const cat of categories) {
+    map.set(cat.id, { category: cat, children: [] });
+  }
+
+  for (const cat of categories) {
+    const node = map.get(cat.id)!;
+    if (cat.parent_id && map.has(cat.parent_id)) {
+      map.get(cat.parent_id)!.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  // Sort children alphabetically
+  const sortNodes = (nodes: TreeNode[]) => {
+    nodes.sort((a, b) => a.category.name.localeCompare(b.category.name));
+    for (const n of nodes) sortNodes(n.children);
+  };
+  sortNodes(roots);
+
+  return roots;
+}
+
+function CategoryTreeItem({
+  node,
+  depth,
+  expandedIds,
+  toggleExpand,
+  onDelete,
+}: {
+  node: TreeNode;
+  depth: number;
+  expandedIds: Set<string>;
+  toggleExpand: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const hasChildren = node.children.length > 0;
+  const isExpanded = expandedIds.has(node.category.id);
+
+  return (
+    <>
+      <div
+        className={cn(
+          "flex items-center gap-2 py-2 px-3 hover:bg-muted/50 rounded-md group transition-colors",
+          depth > 0 && "border-l border-border"
+        )}
+        style={{ marginLeft: depth * 24 }}
+      >
+        {hasChildren ? (
+          <button
+            onClick={() => toggleExpand(node.category.id)}
+            className="p-0.5 rounded hover:bg-accent"
+          >
+            {isExpanded ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            )}
+          </button>
+        ) : (
+          <span className="w-5" />
+        )}
+
+        {hasChildren && isExpanded ? (
+          <FolderOpen className="h-4 w-4 text-primary flex-shrink-0" />
+        ) : (
+          <Folder className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+        )}
+
+        <span className={cn("text-sm flex-1", hasChildren && "font-medium")}>
+          {node.category.name}
+        </span>
+
+        {node.category.slug && (
+          <span className="text-xs text-muted-foreground font-mono hidden md:inline">
+            /{node.category.slug}
+          </span>
+        )}
+
+        {hasChildren && (
+          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+            {node.children.length}
+          </Badge>
+        )}
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={() => onDelete(node.category.id)}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      {hasChildren && isExpanded && (
+        <div>
+          {node.children.map((child) => (
+            <CategoryTreeItem
+              key={child.category.id}
+              node={child}
+              depth={depth + 1}
+              expandedIds={expandedIds}
+              toggleExpand={toggleExpand}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
 
 export default function Categories() {
   const { data: categories = [], isLoading } = useCategories();
@@ -27,15 +149,60 @@ export default function Categories() {
   const [syncProgress, setSyncProgress] = useState(0);
   const [syncLabel, setSyncLabel] = useState("");
   const [syncResult, setSyncResult] = useState<{ created: number; skipped: number; total_woo: number } | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [searchTerm, setSearchTerm] = useState("");
   const progressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const activeStores = wooStores.filter(s => s.is_active);
   const syncing = syncPhase !== "idle" && syncPhase !== "done" && syncPhase !== "error";
 
-  // Cleanup timer on unmount
   useEffect(() => {
     return () => { if (progressTimer.current) clearInterval(progressTimer.current); };
   }, []);
+
+  const tree = useMemo(() => buildTree(categories), [categories]);
+
+  const filteredTree = useMemo(() => {
+    if (!searchTerm.trim()) return tree;
+    const term = searchTerm.toLowerCase();
+    const matchingIds = new Set<string>();
+
+    // Find all matching categories and their ancestors
+    for (const cat of categories) {
+      if (cat.name.toLowerCase().includes(term) || (cat.slug && cat.slug.includes(term))) {
+        matchingIds.add(cat.id);
+        // Add all ancestors
+        let parentId = cat.parent_id;
+        while (parentId) {
+          matchingIds.add(parentId);
+          const parent = categories.find(c => c.id === parentId);
+          parentId = parent?.parent_id || null;
+        }
+      }
+    }
+
+    const filterNodes = (nodes: TreeNode[]): TreeNode[] =>
+      nodes
+        .filter(n => matchingIds.has(n.category.id))
+        .map(n => ({ ...n, children: filterNodes(n.children) }));
+
+    return filterNodes(tree);
+  }, [tree, categories, searchTerm]);
+
+  // Count root vs total
+  const rootCount = tree.length;
+  const totalCount = categories.length;
+
+  const toggleExpand = (id: string) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const expandAll = () => setExpandedIds(new Set(categories.filter(c => categories.some(ch => ch.parent_id === c.id)).map(c => c.id)));
+  const collapseAll = () => setExpandedIds(new Set());
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +217,6 @@ export default function Categories() {
     setSyncResult(null);
     setSyncLabel("A buscar categorias do WooCommerce...");
 
-    // Simulate progress while waiting for the backend
     let fakeProgress = 0;
     if (progressTimer.current) clearInterval(progressTimer.current);
     progressTimer.current = setInterval(() => {
@@ -71,8 +237,6 @@ export default function Categories() {
         setSyncPhase("saving");
         setSyncProgress(90);
         setSyncLabel(`A guardar ${data.created} novas categorias...`);
-
-        // Small delay to show saving phase
         await new Promise(r => setTimeout(r, 500));
 
         setSyncProgress(100);
@@ -110,7 +274,7 @@ export default function Categories() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Categorias</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {categories.length} categoria(s) registadas
+            {totalCount} categoria(s) — {rootCount} raíz, {totalCount - rootCount} subcategorias
           </p>
         </div>
 
@@ -194,26 +358,41 @@ export default function Categories() {
               {activeStores.length > 0 && " Use o botão 'Sincronizar WooCommerce' para importar categorias da sua loja."}
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {categories.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell className="font-medium">{c.name}</TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="icon" onClick={() => deleteCategory.mutate(c.id)}>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="space-y-3">
+              {/* Controls */}
+              <div className="flex items-center gap-3">
+                <Input
+                  placeholder="Pesquisar categorias..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="max-w-xs h-8 text-sm"
+                />
+                <Button variant="ghost" size="sm" onClick={expandAll} className="text-xs h-7">
+                  Expandir tudo
+                </Button>
+                <Button variant="ghost" size="sm" onClick={collapseAll} className="text-xs h-7">
+                  Colapsar tudo
+                </Button>
+              </div>
+
+              {/* Tree */}
+              <div className="border rounded-lg divide-y-0 py-1">
+                {filteredTree.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">Nenhuma categoria encontrada</p>
+                ) : (
+                  filteredTree.map((node) => (
+                    <CategoryTreeItem
+                      key={node.category.id}
+                      node={node}
+                      depth={0}
+                      expandedIds={expandedIds}
+                      toggleExpand={toggleExpand}
+                      onDelete={(id) => deleteCategory.mutate(id)}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

@@ -7,6 +7,9 @@ export interface Category {
   id: string;
   user_id: string;
   name: string;
+  slug: string | null;
+  parent_id: string | null;
+  woo_id: number | null;
   created_at: string;
 }
 
@@ -17,7 +20,7 @@ export function useCategories() {
     queryFn: async () => {
       const { data, error } = await supabase.from("categories").select("*").order("name");
       if (error) throw error;
-      return data as Category[];
+      return data as unknown as Category[];
     },
     enabled: !!user,
   });

@@ -36,6 +36,110 @@ function calcSeoScore(p: Product): number {
   return score;
 }
 
+const FILE_FIELD_ALIASES: Record<string, string[]> = {
+  name: ["name", "nome", "title", "titulo", "designacao", "product", "produto", "description", "descricao"],
+  sku: ["sku", "ref", "referencia", "codigo", "code", "cod", "product code", "item number"],
+  categories: ["categories", "category", "categorias", "categoria", "product categories", "categoria do produto"],
+  brand: ["brand", "marca", "fabricante", "manufacturer", "vendor"],
+};
+
+const normalizeHeader = (h: unknown) =>
+  String(h || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+
+const findFileField = (row: Record<string, string>, field: keyof typeof FILE_FIELD_ALIASES): string => {
+  const aliases = FILE_FIELD_ALIASES[field].map(normalizeHeader);
+  for (const key of Object.keys(row)) {
+    const normalized = normalizeHeader(key);
+    if (aliases.some((alias) => normalized.includes(alias))) return String(row[key] || "").trim();
+  }
+  return "";
+};
+
+const parseCsvLine = (line: string, delimiter: string) => {
+  const values: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === delimiter && !inQuotes) {
+      values.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+
+  values.push(current.trim());
+  return values;
+};
+
+const detectHeaderRowIndex = (rowsMatrix: unknown[][]) => {
+  const headerHints = ["sku", "ref", "name", "nome", "title", "brand", "marca", "categories", "categoria"];
+  let bestIndex = 0;
+  let bestScore = -1;
+
+  for (let i = 0; i < Math.min(40, rowsMatrix.length); i++) {
+    const row = (rowsMatrix[i] || []) as unknown[];
+    const cells = row.map((c) => normalizeHeader(c)).filter(Boolean);
+    if (cells.length < 2) continue;
+
+    const score = cells.reduce((acc, cell) => {
+      const hasHint = headerHints.some((hint) => cell.includes(hint));
+      return acc + (hasHint ? 3 : /[a-zA-ZÀ-ÿ]/.test(cell) ? 1 : 0);
+    }, 0);
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = i;
+    }
+  }
+
+  return bestIndex > 0 ? bestIndex : 0;
+};
+
+const normalizeLookupKey = (value: unknown) =>
+  String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+
+const extractPrimaryCategoryName = (value: unknown) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+
+  const firstGroup = raw
+    .split(/[;,|]/)
+    .map((part) => part.trim())
+    .find(Boolean) || "";
+
+  const breadcrumbParts = firstGroup
+    .split(">")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return breadcrumbParts.length > 0 ? breadcrumbParts[breadcrumbParts.length - 1] : firstGroup;
+};
+
+type FileDerivedHints = {
+  category_name: string | null;
+  brand: string | null;
+};
+
+const mergeHint = (current: FileDerivedHints | undefined, incoming: FileDerivedHints): FileDerivedHints => ({
+  category_name: current?.category_name || incoming.category_name || null,
+  brand: current?.brand || incoming.brand || null,
+});
+
 export function SpreadsheetEditor({ products }: { products: Product[] }) {
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();
@@ -89,6 +193,131 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
       return true;
     });
   }, [products, columnFilters, categories]);
+
+  const buildCatalogFileHints = async (selected: Product[]) => {
+    const hintsByLookupKey = new Map<string, FileDerivedHints>();
+
+    const targetSkuKeys = new Set(
+      selected
+        .map((p) => normalizeLookupKey(p.sku))
+        .filter(Boolean),
+    );
+
+    const targetNameKeys = new Set(
+      selected
+        .map((p) => normalizeLookupKey(p.name))
+        .filter(Boolean),
+    );
+
+    const catalogIds = Array.from(
+      new Set(
+        selected
+          .map((p) => p.catalog_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
+
+    if ((targetSkuKeys.size === 0 && targetNameKeys.size === 0) || catalogIds.length === 0) {
+      return hintsByLookupKey;
+    }
+
+    const { data: linkedFiles, error: filesError } = await supabase
+      .from("catalog_files")
+      .select("file_name, file_url, file_type, catalog_id, created_at")
+      .in("catalog_id", catalogIds)
+      .order("created_at", { ascending: false });
+
+    if (filesError || !linkedFiles || linkedFiles.length === 0) {
+      return hintsByLookupKey;
+    }
+
+    const processRow = (row: Record<string, string>) => {
+      const sku = findFileField(row, "sku");
+      const name = findFileField(row, "name");
+      const skuKey = normalizeLookupKey(sku);
+      const nameKey = normalizeLookupKey(name);
+      const shouldUseSku = Boolean(skuKey) && targetSkuKeys.has(skuKey);
+      const shouldUseName = Boolean(nameKey) && targetNameKeys.has(nameKey);
+
+      if (!shouldUseSku && !shouldUseName) return;
+
+      const categoryName = extractPrimaryCategoryName(findFileField(row, "categories")) || null;
+      const brandName = findFileField(row, "brand") || null;
+
+      if (!categoryName && !brandName) return;
+
+      const incomingHint: FileDerivedHints = { category_name: categoryName, brand: brandName };
+
+      if (shouldUseSku && skuKey) {
+        hintsByLookupKey.set(skuKey, mergeHint(hintsByLookupKey.get(skuKey), incomingHint));
+      }
+
+      if (shouldUseName && nameKey) {
+        hintsByLookupKey.set(nameKey, mergeHint(hintsByLookupKey.get(nameKey), incomingHint));
+      }
+    };
+
+    let XLSX: any = null;
+
+    const typedLinkedFiles = linkedFiles as unknown as Array<{ file_name: string; file_url: string; file_type: string }>;
+
+    for (const file of typedLinkedFiles) {
+      const ext = file.file_name.split(".").pop()?.toLowerCase() || "";
+      const isSpreadsheet = file.file_type === "excel" || ext === "csv" || ext === "xlsx" || ext === "xls";
+      if (!isSpreadsheet) continue;
+
+      try {
+        const response = await fetch(file.file_url);
+        if (!response.ok) continue;
+
+        if (ext === "csv") {
+          const text = await response.text();
+          const lines = text
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean);
+
+          if (lines.length < 2) continue;
+
+          const delimiter = (lines[0].match(/;/g)?.length ?? 0) > (lines[0].match(/,/g)?.length ?? 0) ? ";" : ",";
+          const headers = parseCsvLine(lines[0], delimiter);
+
+          for (let i = 1; i < lines.length; i++) {
+            const values = parseCsvLine(lines[i], delimiter);
+            const row: Record<string, string> = {};
+            headers.forEach((header, idx) => {
+              row[header] = values[idx] || "";
+            });
+            processRow(row);
+          }
+          continue;
+        }
+
+        XLSX = XLSX || (await import("xlsx"));
+        const buffer = await response.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: "array" });
+
+        for (const sheetName of workbook.SheetNames) {
+          const worksheet = workbook.Sheets[sheetName];
+          const allRows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" }) as unknown[][];
+          const headerRowIdx = detectHeaderRowIndex(allRows);
+          const jsonRows = XLSX.utils.sheet_to_json(worksheet, { defval: "", range: headerRowIdx }) as Array<Record<string, unknown>>;
+
+          for (const rawRow of jsonRows) {
+            const row: Record<string, string> = {};
+            Object.keys(rawRow).forEach((key) => {
+              row[String(key).trim()] = String(rawRow[key] ?? "").trim();
+            });
+            processRow(row);
+          }
+        }
+      } catch {
+        // Ignore file-level parsing errors and continue with remaining files.
+      }
+    }
+
+    return hintsByLookupKey;
+  };
 
   const startEdit = (productId: string, field: string, currentValue: any) => {
     setEditingCell({ productId, field });
@@ -584,11 +813,21 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
                   let errors = 0;
                   setBulkProgress({ current: 0, total: totalProducts, label: "WooCommerce" });
                   try {
+                    const fileHintsByLookupKey = await buildCatalogFileHints(selected);
+
                     for (let i = 0; i < totalProducts; i += BATCH_SIZE) {
-                      const batch = selected.slice(i, i + BATCH_SIZE).map(p => ({
-                        ...p,
-                        category_name: categories.find(c => c.id === p.category_id)?.name || null,
-                      }));
+                      const batch = selected.slice(i, i + BATCH_SIZE).map((p) => {
+                        const skuKey = normalizeLookupKey(p.sku);
+                        const nameKey = normalizeLookupKey(p.name);
+                        const fileHint = (skuKey && fileHintsByLookupKey.get(skuKey)) || (nameKey && fileHintsByLookupKey.get(nameKey));
+
+                        return {
+                          ...p,
+                          brand: p.brand || fileHint?.brand || null,
+                          category_name: categories.find((c) => c.id === p.category_id)?.name || fileHint?.category_name || null,
+                        };
+                      });
+
                       const { data, error } = await supabase.functions.invoke("woo-sync", {
                         body: { action: "export", store_id: storeId, products: batch },
                       });

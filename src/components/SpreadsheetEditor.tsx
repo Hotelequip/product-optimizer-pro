@@ -36,6 +36,110 @@ function calcSeoScore(p: Product): number {
   return score;
 }
 
+const FILE_FIELD_ALIASES: Record<string, string[]> = {
+  name: ["name", "nome", "title", "titulo", "designacao", "product", "produto", "description", "descricao"],
+  sku: ["sku", "ref", "referencia", "codigo", "code", "cod", "product code", "item number"],
+  categories: ["categories", "category", "categorias", "categoria", "product categories", "categoria do produto"],
+  brand: ["brand", "marca", "fabricante", "manufacturer", "vendor"],
+};
+
+const normalizeHeader = (h: unknown) =>
+  String(h || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+
+const findFileField = (row: Record<string, string>, field: keyof typeof FILE_FIELD_ALIASES): string => {
+  const aliases = FILE_FIELD_ALIASES[field].map(normalizeHeader);
+  for (const key of Object.keys(row)) {
+    const normalized = normalizeHeader(key);
+    if (aliases.some((alias) => normalized.includes(alias))) return String(row[key] || "").trim();
+  }
+  return "";
+};
+
+const parseCsvLine = (line: string, delimiter: string) => {
+  const values: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === delimiter && !inQuotes) {
+      values.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+
+  values.push(current.trim());
+  return values;
+};
+
+const detectHeaderRowIndex = (rowsMatrix: unknown[][]) => {
+  const headerHints = ["sku", "ref", "name", "nome", "title", "brand", "marca", "categories", "categoria"];
+  let bestIndex = 0;
+  let bestScore = -1;
+
+  for (let i = 0; i < Math.min(40, rowsMatrix.length); i++) {
+    const row = (rowsMatrix[i] || []) as unknown[];
+    const cells = row.map((c) => normalizeHeader(c)).filter(Boolean);
+    if (cells.length < 2) continue;
+
+    const score = cells.reduce((acc, cell) => {
+      const hasHint = headerHints.some((hint) => cell.includes(hint));
+      return acc + (hasHint ? 3 : /[a-zA-ZÀ-ÿ]/.test(cell) ? 1 : 0);
+    }, 0);
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = i;
+    }
+  }
+
+  return bestIndex > 0 ? bestIndex : 0;
+};
+
+const normalizeLookupKey = (value: unknown) =>
+  String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+
+const extractPrimaryCategoryName = (value: unknown) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+
+  const firstGroup = raw
+    .split(/[;,|]/)
+    .map((part) => part.trim())
+    .find(Boolean) || "";
+
+  const breadcrumbParts = firstGroup
+    .split(">")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return breadcrumbParts.length > 0 ? breadcrumbParts[breadcrumbParts.length - 1] : firstGroup;
+};
+
+type FileDerivedHints = {
+  category_name: string | null;
+  brand: string | null;
+};
+
+const mergeHint = (current: FileDerivedHints | undefined, incoming: FileDerivedHints): FileDerivedHints => ({
+  category_name: current?.category_name || incoming.category_name || null,
+  brand: current?.brand || incoming.brand || null,
+});
+
 export function SpreadsheetEditor({ products }: { products: Product[] }) {
   const updateProduct = useUpdateProduct();
   const deleteProduct = useDeleteProduct();

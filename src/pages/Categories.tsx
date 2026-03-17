@@ -246,6 +246,7 @@ export default function Categories() {
     setSyncProgress(0);
     setSyncResult(null);
     setSyncLabel("A buscar categorias do WooCommerce...");
+    setLastSyncedStoreId(storeId);
     let fakeProgress = 0;
     if (progressTimer.current) clearInterval(progressTimer.current);
     progressTimer.current = setInterval(() => {

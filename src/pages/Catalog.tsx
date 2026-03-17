@@ -486,28 +486,8 @@ export default function Catalog() {
       categoryIdByNameKey.set(normalizeLookupKey(category.name), category.id);
     }
 
-    const missingCategoryNames: string[] = [];
-    for (const [key, name] of desiredByKey.entries()) {
-      if (!categoryIdByNameKey.has(key)) {
-        missingCategoryNames.push(name);
-      }
-    }
-
-    if (missingCategoryNames.length > 0) {
-      const { data: createdCategories, error: createError } = await supabase
-        .from("categories")
-        .insert(missingCategoryNames.map((name) => ({ user_id: user.id, name })) as any)
-        .select("id, name");
-
-      if (createError) {
-        throw new Error(`Falha ao criar categorias: ${createError.message}`);
-      }
-
-      for (const category of createdCategories || []) {
-        categoryIdByNameKey.set(normalizeLookupKey(category.name), category.id);
-      }
-    }
-
+    // Only map to existing categories — do NOT auto-create categories from import files.
+    // Categories should be managed via WooCommerce sync or manual creation.
     return categoryIdByNameKey;
   };
 

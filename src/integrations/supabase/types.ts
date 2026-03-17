@@ -84,21 +84,38 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          parent_id: string | null
+          slug: string | null
           user_id: string
+          woo_id: number | null
         }
         Insert: {
           created_at?: string
           id?: string
           name: string
+          parent_id?: string | null
+          slug?: string | null
           user_id: string
+          woo_id?: number | null
         }
         Update: {
           created_at?: string
           id?: string
           name?: string
+          parent_id?: string | null
+          slug?: string | null
           user_id?: string
+          woo_id?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "categories_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       import_sessions: {
         Row: {

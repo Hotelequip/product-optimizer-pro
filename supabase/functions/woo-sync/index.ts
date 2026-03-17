@@ -473,35 +473,77 @@ Deno.serve(async (req) => {
         if (catPage > 20) break; // safety limit: 2000 categories
       }
 
-      // Get existing local categories
+      // Get existing local categories (with woo_id for matching)
       const { data: existingCategories } = await supabase
         .from('categories')
-        .select('id, name')
+        .select('id, name, woo_id')
         .eq('user_id', user.id);
 
-      const existingNamesSet = new Set(
-        (existingCategories || []).map((c: any) => c.name.trim().toLowerCase())
-      );
+      const existingByWooId = new Map<number, string>();
+      const existingByName = new Map<string, string>();
+      for (const c of (existingCategories || [])) {
+        if (c.woo_id) existingByWooId.set(Number(c.woo_id), c.id);
+        existingByName.set(c.name.trim().toLowerCase(), c.id);
+      }
 
-      // Insert only new categories (avoid duplicates)
+      // Build woo_id → local_id map (insert new, skip existing)
+      const wooIdToLocalId = new Map<number, string>();
       let created = 0;
       let skipped = 0;
+
+      // First pass: insert/match all categories (without parent)
       for (const wooCat of wooAllCategories) {
         const name = String(wooCat.name || '').trim();
+        const wooId = Number(wooCat.id);
+        const slug = String(wooCat.slug || '').trim() || null;
+
         if (!name || name.toLowerCase() === 'uncategorized' || name.toLowerCase() === 'sem categoria') {
           skipped++;
           continue;
         }
-        if (existingNamesSet.has(name.toLowerCase())) {
+
+        // Already exists by woo_id?
+        if (existingByWooId.has(wooId)) {
+          wooIdToLocalId.set(wooId, existingByWooId.get(wooId)!);
+          // Update slug if missing
+          await supabase.from('categories').update({ slug, woo_id: wooId }).eq('id', existingByWooId.get(wooId)!);
           skipped++;
           continue;
         }
-        const { error: insertError } = await supabase
+
+        // Already exists by name?
+        if (existingByName.has(name.toLowerCase())) {
+          const localId = existingByName.get(name.toLowerCase())!;
+          wooIdToLocalId.set(wooId, localId);
+          await supabase.from('categories').update({ slug, woo_id: wooId }).eq('id', localId);
+          skipped++;
+          continue;
+        }
+
+        // Insert new
+        const { data: inserted, error: insertError } = await supabase
           .from('categories')
-          .insert({ name, user_id: user.id });
-        if (!insertError) {
+          .insert({ name, user_id: user.id, slug, woo_id: wooId })
+          .select('id')
+          .single();
+
+        if (!insertError && inserted) {
           created++;
-          existingNamesSet.add(name.toLowerCase());
+          wooIdToLocalId.set(wooId, inserted.id);
+          existingByName.set(name.toLowerCase(), inserted.id);
+        }
+      }
+
+      // Second pass: set parent_id based on WooCommerce parent hierarchy
+      for (const wooCat of wooAllCategories) {
+        const wooId = Number(wooCat.id);
+        const wooParent = Number(wooCat.parent || 0);
+        if (wooParent === 0) continue;
+
+        const localId = wooIdToLocalId.get(wooId);
+        const parentLocalId = wooIdToLocalId.get(wooParent);
+        if (localId && parentLocalId) {
+          await supabase.from('categories').update({ parent_id: parentLocalId }).eq('id', localId);
         }
       }
 
@@ -510,13 +552,6 @@ Deno.serve(async (req) => {
         total_woo: wooAllCategories.length,
         created,
         skipped,
-        categories: wooAllCategories.map((c: any) => ({
-          id: c.id,
-          name: c.name,
-          slug: c.slug,
-          parent: c.parent,
-          count: c.count,
-        })),
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 

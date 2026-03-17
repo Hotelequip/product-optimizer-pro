@@ -839,7 +839,15 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
                     } else if (data?.success) {
                       const sent = data.results?.reduce((sum: number, r: any) => sum + (r.created || 0) + (r.updated || 0), 0) || 0;
                       const failed = data.results?.reduce((sum: number, r: any) => sum + (r.error ? 1 : 0), 0) || 0;
-                      if (sent > 0) toast({ title: `${sent} produtos criados/atualizados no WooCommerce!` });
+                      if (sent > 0) {
+                        // Mark synced products with woo_synced_at
+                        const now = new Date().toISOString();
+                        const syncedIds = selected.map(p => p.id);
+                        for (const id of syncedIds) {
+                          try { await updateProduct.mutateAsync({ id, woo_synced_at: now } as any); } catch {}
+                        }
+                        toast({ title: `${sent} produtos publicados no WooCommerce!` });
+                      }
                       if (failed > 0) toast({ title: `${failed} lotes falharam`, variant: "destructive" });
                     } else {
                       toast({ title: "Erro", description: data?.error || "Falha desconhecida", variant: "destructive" });

@@ -31,6 +31,7 @@ export interface Product {
   optimized_title: string | null;
   product_type: string;
   data_origin: Record<string, string> | null;
+  woo_synced_at: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -91,6 +91,40 @@ Deno.serve(async (req) => {
       const normalizeText = (value: unknown) => String(value ?? '').trim().toLowerCase();
       const normalizeTaxonomyKey = (value: unknown) => normalizeText(value).replace(/^pa_/, '');
       const normalizeKey = (value: unknown) => normalizeText(value);
+      const normalizeCategoryKey = (value: unknown) => normalizeText(value)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9\s-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      const normalizeSlugLike = (value: unknown) => normalizeCategoryKey(value).replace(/\s+/g, '-');
+
+      const splitCategoryCandidates = (value: unknown): string[] => {
+        const raw = String(value ?? '').replace(/<[^>]*>/g, ' ').trim();
+        if (!raw) return [];
+
+        const direct = raw
+          .split(/[;,|]+/)
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+        const breadcrumbParts = direct.flatMap((item) =>
+          item
+            .split(/[>\/\\›»]+/)
+            .map((s) => s.trim())
+            .filter(Boolean)
+        );
+
+        const preferred = [...breadcrumbParts].reverse(); // leaf first
+        return Array.from(new Set([raw, ...preferred, ...direct]));
+      };
+
+      const getResolvedSourceCategoryName = (p: any) =>
+        String(
+          p?.category_name
+          ?? categoryNameById.get(String(p?.category_id ?? ''))
+          ?? ''
+        ).trim();
 
       // Resolve product category names from DB when only category_id is available
       const categoryNameById = new Map<string, string>();
@@ -117,6 +151,8 @@ Deno.serve(async (req) => {
       // Pre-fetch existing WooCommerce categories to map by name/slug
       let wooCategories: any[] = [];
       const wooCategoryLookup = new Map<string, number>();
+      const wooCategoryEntries: Array<{ id: number; nameKey: string; compactKey: string; slugKey: string; slugLike: string }> = [];
+
       try {
         let catPage = 1;
         let hasMoreCats = true;
@@ -128,10 +164,20 @@ Deno.serve(async (req) => {
             const cats = await catRes.json();
             wooCategories = wooCategories.concat(cats);
             for (const c of cats) {
+              const id = Number(c?.id);
+              if (!Number.isFinite(id)) continue;
+
               const nameKey = normalizeText(c?.name);
+              const compactKey = normalizeCategoryKey(c?.name);
               const slugKey = normalizeText(c?.slug);
-              if (nameKey) wooCategoryLookup.set(nameKey, c.id);
-              if (slugKey) wooCategoryLookup.set(slugKey, c.id);
+              const slugLike = normalizeSlugLike(c?.name);
+
+              if (nameKey) wooCategoryLookup.set(nameKey, id);
+              if (compactKey) wooCategoryLookup.set(compactKey, id);
+              if (slugKey) wooCategoryLookup.set(slugKey, id);
+              if (slugLike) wooCategoryLookup.set(slugLike, id);
+
+              wooCategoryEntries.push({ id, nameKey, compactKey, slugKey, slugLike });
             }
             hasMoreCats = cats.length === 100;
             catPage++;
@@ -140,19 +186,42 @@ Deno.serve(async (req) => {
         }
       } catch (e) { console.error('Error fetching WooCommerce categories:', e); }
 
+      // Lookup existing WooCommerce category by name (NEVER create new ones)
+      function findWooCategory(rawCategory: unknown): number | null {
+        const candidates = splitCategoryCandidates(rawCategory);
+        if (candidates.length === 0) return null;
+
+        for (const candidate of candidates) {
+          const directMatch =
+            wooCategoryLookup.get(normalizeText(candidate))
+            ?? wooCategoryLookup.get(normalizeCategoryKey(candidate))
+            ?? wooCategoryLookup.get(normalizeSlugLike(candidate));
+
+          if (directMatch) return directMatch;
+        }
+
+        for (const candidate of candidates) {
+          const candidateKey = normalizeCategoryKey(candidate);
+          if (candidateKey.length < 4) continue;
+
+          const fuzzy = wooCategoryEntries.find((entry) =>
+            entry.compactKey === candidateKey
+            || entry.slugLike === candidateKey
+            || entry.compactKey.includes(candidateKey)
+            || candidateKey.includes(entry.compactKey)
+          );
+
+          if (fuzzy?.id) return fuzzy.id;
+        }
+
+        return null;
+      }
+
       const defaultCategoryId =
-        wooCategoryLookup.get('sem categoria') ||
-        wooCategoryLookup.get('uncategorized') ||
+        findWooCategory('sem categoria') ||
+        findWooCategory('uncategorized') ||
         wooCategories[0]?.id ||
         null;
-
-      // Lookup existing WooCommerce category by name (NEVER create new ones)
-      function findWooCategory(name: string): number | null {
-        const cleaned = String(name ?? '').trim();
-        if (!cleaned) return null;
-        const key = normalizeText(cleaned);
-        return wooCategoryLookup.get(key) ?? null;
-      }
 
       // Discover global attribute used for brand (if configured in WooCommerce)
       let brandAttributeId: number | null = null;
@@ -210,9 +279,10 @@ Deno.serve(async (req) => {
         const result = new Map<string, string>();
         if (!LOVABLE_API_KEY || wooCategoryNames.length === 0 || items.length === 0) return result;
 
-        const productList = items.map((p, i) => 
-          `${i + 1}. "${p.optimized_title || p.seo_title || p.name}" (marca: ${p.brand || 'N/A'})`
-        ).join('\n');
+        const productList = items.map((p, i) => {
+          const sourceCategory = getResolvedSourceCategoryName(p) || 'N/A';
+          return `${i + 1}. "${p.optimized_title || p.seo_title || p.name}" (marca: ${p.brand || 'N/A'}, categoria_origem: ${sourceCategory})`;
+        }).join('\n');
 
         try {
           const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -255,34 +325,17 @@ Deno.serve(async (req) => {
       for (let i = 0; i < products.length; i += BATCH_SIZE) {
         const batch = products.slice(i, i + BATCH_SIZE);
 
-        // Identify products without category in this batch
+        // Identify products still without a valid mapped Woo category (even if source category exists)
         const needsCategory = batch.filter((p: any) => {
-          const hasCatName = String(p?.category_name ?? '').trim().length > 0;
-          const hasCatId = String(p?.category_id ?? '').trim().length > 0 && categoryNameById.has(String(p?.category_id ?? ''));
-          return !hasCatName && !hasCatId;
+          const sourceCategory = getResolvedSourceCategoryName(p);
+          return !findWooCategory(sourceCategory);
         });
 
-        // Use AI to suggest categories for products that don't have one
+        // Use AI to suggest EXISTING Woo categories for unmapped products
         if (needsCategory.length > 0) {
           const suggestions = await suggestCategoriesForBatch(needsCategory);
           for (const [key, catName] of suggestions) {
             aiCategoryCache.set(key, catName);
-          }
-        }
-
-        // Resolve categories for this batch
-        const categoryMap = new Map<string, number>();
-        for (const p of batch) {
-          const resolvedCategoryName = String(
-            p?.category_name
-            ?? categoryNameById.get(String(p?.category_id ?? ''))
-            ?? aiCategoryCache.get(normalizeKey(p.sku || p.name))
-            ?? ''
-          ).trim();
-
-          if (resolvedCategoryName && !categoryMap.has(resolvedCategoryName)) {
-            const catId = findWooCategory(resolvedCategoryName);
-            if (catId) categoryMap.set(resolvedCategoryName, catId);
           }
         }
 
@@ -309,16 +362,17 @@ Deno.serve(async (req) => {
           const slug = String(p.slug ?? '').trim();
           if (slug) product.slug = slug;
 
-          // Category (use resolved category from file/DB/AI, fallback to default)
-          const resolvedCategoryName = String(
-            p?.category_name
-            ?? categoryNameById.get(String(p?.category_id ?? ''))
-            ?? aiCategoryCache.get(normalizeKey(p.sku || p.name))
-            ?? ''
-          ).trim();
+          // Category (source file/DB first, then AI-restricted fallback, then default)
+          const sourceCategoryName = getResolvedSourceCategoryName(p);
+          const aiSuggestedCategoryName = String(aiCategoryCache.get(normalizeKey(p.sku || p.name)) ?? '').trim();
 
-          if (resolvedCategoryName && categoryMap.has(resolvedCategoryName)) {
-            product.categories = [{ id: categoryMap.get(resolvedCategoryName) }];
+          const mappedCategoryId =
+            findWooCategory(sourceCategoryName)
+            ?? findWooCategory(aiSuggestedCategoryName)
+            ?? null;
+
+          if (mappedCategoryId) {
+            product.categories = [{ id: mappedCategoryId }];
           } else if (defaultCategoryId) {
             product.categories = [{ id: defaultCategoryId }];
           }

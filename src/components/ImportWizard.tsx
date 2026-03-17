@@ -18,6 +18,7 @@ export interface ParsedProduct {
   stock: number;
   brand: string | null;
   supplier_url?: string | null;
+  category_name?: string | null;
   _source?: string;
   _selected?: boolean;
 }
@@ -108,6 +109,7 @@ async function parseExcelFile(file: File): Promise<ParsedProduct[]> {
         price: parseNum(findVal(row, ["price", "preco", "pvp", "sell", "venda"])),
         stock: Math.max(0, Math.trunc(parseNum(findVal(row, ["stock", "estoque", "qty", "quantidade", "std", "units"])))),
         brand: findVal(row, ["brand", "marca"]) || null,
+        category_name: findVal(row, ["category", "categoria", "categories", "categorias", "cat", "product category", "categoria do produto"]) || null,
         supplier_url: findVal(row, ["supplier_url", "url", "fornecedor_url"]) || null, _source: file.name,
       });
     }
@@ -147,7 +149,9 @@ async function parseCsvFile(file: File): Promise<ParsedProduct[]> {
       description: null, cost: parseNum(findVal(row, ["cost", "custo", "tarif", "preco custo", "net", "euro"])),
       price: parseNum(findVal(row, ["price", "preco", "pvp", "sell", "venda"])),
       stock: Math.max(0, Math.trunc(parseNum(findVal(row, ["stock", "estoque", "qty", "quantidade"])))),
-      brand: findVal(row, ["brand", "marca"]) || null, _source: file.name,
+      brand: findVal(row, ["brand", "marca"]) || null,
+      category_name: findVal(row, ["category", "categoria", "categories", "categorias", "cat", "product category", "categoria do produto"]) || null,
+      _source: file.name,
     });
   }
   return products;

@@ -218,15 +218,85 @@ Deno.serve(async (req) => {
         }
       } catch (e) { console.error('Error fetching existing WooCommerce products:', e); }
 
+      // AI-based category suggestion for products without category
+      const wooCategoryNames = wooCategories
+        .filter((c: any) => normalizeText(c?.name) !== 'sem categoria' && normalizeText(c?.slug) !== 'uncategorized')
+        .map((c: any) => c.name);
+
+      const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+      const aiCategoryCache = new Map<string, string>(); // product key → category name
+
+      async function suggestCategoriesForBatch(items: any[]): Promise<Map<string, string>> {
+        const result = new Map<string, string>();
+        if (!LOVABLE_API_KEY || wooCategoryNames.length === 0 || items.length === 0) return result;
+
+        const productList = items.map((p, i) => 
+          `${i + 1}. "${p.optimized_title || p.seo_title || p.name}" (marca: ${p.brand || 'N/A'})`
+        ).join('\n');
+
+        try {
+          const aiRes = await fetch('https://api.lovable.dev/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'google/gemini-2.5-flash-lite',
+              messages: [{
+                role: 'user',
+                content: `You are a product categorization expert. Given these WooCommerce store categories:\n${wooCategoryNames.join(', ')}\n\nAssign the BEST matching category to each product below. Reply ONLY with a JSON array of objects: [{"index":1,"category":"exact category name"},...]\nIf no good match exists, use the closest parent category.\n\nProducts:\n${productList}`
+              }],
+              temperature: 0.1,
+              max_tokens: 2000,
+            }),
+          });
+
+          if (aiRes.ok) {
+            const aiData = await aiRes.json();
+            const content = aiData.choices?.[0]?.message?.content || '';
+            const jsonMatch = content.match(/\[[\s\S]*?\]/);
+            if (jsonMatch) {
+              const suggestions = JSON.parse(jsonMatch[0]);
+              for (const s of suggestions) {
+                if (s.index >= 1 && s.index <= items.length && s.category) {
+                  const key = normalizeKey(items[s.index - 1].sku || items[s.index - 1].name);
+                  result.set(key, s.category);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.error('AI category suggestion error:', e);
+        }
+        return result;
+      }
+
       for (let i = 0; i < products.length; i += BATCH_SIZE) {
         const batch = products.slice(i, i + BATCH_SIZE);
 
-        // Resolve categories for this batch (category_name first, then category_id lookup)
+        // Identify products without category in this batch
+        const needsCategory = batch.filter((p: any) => {
+          const hasCatName = String(p?.category_name ?? '').trim().length > 0;
+          const hasCatId = String(p?.category_id ?? '').trim().length > 0 && categoryNameById.has(String(p?.category_id ?? ''));
+          return !hasCatName && !hasCatId;
+        });
+
+        // Use AI to suggest categories for products that don't have one
+        if (needsCategory.length > 0) {
+          const suggestions = await suggestCategoriesForBatch(needsCategory);
+          for (const [key, catName] of suggestions) {
+            aiCategoryCache.set(key, catName);
+          }
+        }
+
+        // Resolve categories for this batch
         const categoryMap = new Map<string, number>();
         for (const p of batch) {
           const resolvedCategoryName = String(
             p?.category_name
             ?? categoryNameById.get(String(p?.category_id ?? ''))
+            ?? aiCategoryCache.get(normalizeKey(p.sku || p.name))
             ?? ''
           ).trim();
 

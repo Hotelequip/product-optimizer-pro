@@ -338,6 +338,30 @@ const getFirstImageUrl = (imageUrl?: string | null): string | null => {
   return urls.length > 0 ? urls[0] : null;
 };
 
+const findExistingCatalogFile = async (params: {
+  userId: string;
+  catalogId: string | null;
+  fileName: string;
+  fileSize: number;
+}) => {
+  let query = supabase
+    .from("catalog_files")
+    .select("id")
+    .eq("user_id", params.userId)
+    .eq("file_name", params.fileName)
+    .eq("file_size", params.fileSize)
+    .limit(1);
+
+  query = params.catalogId
+    ? query.eq("catalog_id", params.catalogId)
+    : query.is("catalog_id", null);
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Falha ao verificar ficheiro duplicado: ${error.message}`);
+
+  return Boolean(data && data.length > 0);
+};
+
 export default function Catalog() {
   const { data: products = [], isLoading } = useProducts();
   const { data: categories = [] } = useCategories();
@@ -488,6 +512,17 @@ export default function Catalog() {
   };
 
   const attachImportedFile = async (file: File, catalogId: string | null, forcedType?: "excel" | "pdf" | "other") => {
+    if (!user) throw new Error("Sessão expirada.");
+
+    const alreadyAttached = await findExistingCatalogFile({
+      userId: user.id,
+      catalogId,
+      fileName: file.name,
+      fileSize: file.size,
+    });
+
+    if (alreadyAttached) return false;
+
     const storagePath = buildSafeStoragePath(file);
     const { error: uploadErr } = await supabase.storage
       .from("catalog-files")
@@ -508,6 +543,8 @@ export default function Catalog() {
       file_type: fileType,
       file_size: file.size,
     });
+
+    return true;
   };
 
   // Excel/CSV import — assigns to selected catalog
@@ -949,16 +986,23 @@ export default function Catalog() {
     const bySku = new Map<string, { id: string; catalog_id: string | null }>();
     const byName = new Map<string, { id: string; catalog_id: string | null }>();
     for (const p of existing) {
-      if (p.sku) bySku.set(p.sku.toLowerCase().trim(), { id: p.id, catalog_id: p.catalog_id });
-      byName.set(p.name.toLowerCase().trim(), { id: p.id, catalog_id: p.catalog_id });
+      const normalizedSku = normalizeLookupKey(p.sku);
+      const normalizedName = normalizeLookupKey(p.name);
+      if (normalizedSku) bySku.set(normalizedSku, { id: p.id, catalog_id: p.catalog_id });
+      if (normalizedName) byName.set(normalizedName, { id: p.id, catalog_id: p.catalog_id });
     }
 
     const toInsert: Array<Record<string, unknown>> = [];
     const toUpdate: Array<{ id: string; updates: Record<string, unknown> }> = [];
+    const seenImportKeys = new Set<string>();
 
     for (const p of products) {
-      const skuKey = p.sku?.toLowerCase().trim();
-      const nameKey = p.name.toLowerCase().trim();
+      const skuKey = normalizeLookupKey(p.sku);
+      const nameKey = normalizeLookupKey(p.name);
+      const dedupeKey = skuKey ? `sku:${skuKey}` : nameKey ? `name:${nameKey}` : "";
+      if (!dedupeKey || seenImportKeys.has(dedupeKey)) continue;
+      seenImportKeys.add(dedupeKey);
+
       const importedCategory = extractPrimaryCategoryName(p.category_name);
       const importedCategoryId = importedCategory
         ? categoryIdByNameKey.get(normalizeLookupKey(importedCategory)) || null
@@ -1793,23 +1837,61 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
         throw new Error("Formato não suportado para extração. Use Excel, CSV ou PDF.");
       }
 
-      // Dedup
+      // Dedup dentro do próprio ficheiro
       const deduped: Array<Record<string, unknown>> = [];
       const seen = new Set<string>();
       for (const p of productsToInsert) {
-        const key = `${String(p.sku ?? "").toLowerCase()}|${String(p.name ?? "").toLowerCase()}`;
-        if (seen.has(key)) continue;
+        const skuKey = normalizeLookupKey(p.sku);
+        const nameKey = normalizeLookupKey(p.name);
+        const key = skuKey ? `sku:${skuKey}` : nameKey ? `name:${nameKey}` : "";
+        if (!key || seen.has(key)) continue;
         seen.add(key);
         deduped.push(p);
       }
 
       if (deduped.length === 0) throw new Error("Nenhum produto encontrado no ficheiro.");
 
+      // Evita inserir produtos já existentes (re-extração do mesmo ficheiro)
+      let existingQuery = supabase
+        .from("products")
+        .select("sku, name")
+        .eq("user_id", user.id);
+
+      if (catalogId) existingQuery = existingQuery.eq("catalog_id", catalogId);
+
+      const { data: existingProducts, error: existingError } = await existingQuery;
+      if (existingError) throw new Error(existingError.message);
+
+      const existingSkuKeys = new Set<string>();
+      const existingNameKeys = new Set<string>();
+      for (const existing of existingProducts || []) {
+        const skuKey = normalizeLookupKey(existing.sku);
+        const nameKey = normalizeLookupKey(existing.name);
+        if (skuKey) existingSkuKeys.add(skuKey);
+        if (nameKey) existingNameKeys.add(nameKey);
+      }
+
+      const toInsert = deduped.filter((p) => {
+        const skuKey = normalizeLookupKey(p.sku);
+        const nameKey = normalizeLookupKey(p.name);
+        const alreadyExists = (skuKey && existingSkuKeys.has(skuKey)) || (nameKey && existingNameKeys.has(nameKey));
+        if (alreadyExists) return false;
+
+        if (skuKey) existingSkuKeys.add(skuKey);
+        if (nameKey) existingNameKeys.add(nameKey);
+        return true;
+      });
+
+      if (toInsert.length === 0) {
+        toast({ title: "Sem novos produtos", description: "Este ficheiro já foi extraído anteriormente para esta pasta." });
+        return;
+      }
+
       // Insert in batches
       const BATCH_SIZE = 100;
       let inserted = 0;
-      for (let i = 0; i < deduped.length; i += BATCH_SIZE) {
-        const chunk = deduped.slice(i, i + BATCH_SIZE);
+      for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
+        const chunk = toInsert.slice(i, i + BATCH_SIZE);
         const { data: result, error: insertErr } = await supabase.from("products").insert(chunk as any).select("id");
         if (insertErr) throw new Error(insertErr.message);
         inserted += result?.length ?? chunk.length;
@@ -1963,6 +2045,18 @@ function CatalogFilesTab({ selectedCatalogId }: { selectedCatalogId: string }) {
 
     setUploading(true);
     try {
+      const alreadyAttached = await findExistingCatalogFile({
+        userId: user.id,
+        catalogId,
+        fileName: file.name,
+        fileSize: file.size,
+      });
+
+      if (alreadyAttached) {
+        toast({ title: "Ficheiro já associado", description: "Este ficheiro já existe nesta pasta." });
+        return;
+      }
+
       const sanitizedName = file.name
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")

@@ -884,42 +884,6 @@ export default function Catalog() {
 
     const catalogId = selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized" ? selectedCatalogId : null;
 
-    // Resolve category names to category IDs (create if needed)
-    const { data: existingCategories } = await supabase
-      .from("categories")
-      .select("id, name")
-      .eq("user_id", user.id);
-
-    const categoryByName = new Map<string, string>();
-    for (const c of existingCategories || []) {
-      categoryByName.set(c.name.toLowerCase().trim(), c.id);
-    }
-
-    // Collect unique category names from imported products
-    const uniqueCatNames = new Set<string>();
-    for (const p of products) {
-      const catName = (p.category_name ?? "").trim();
-      if (catName && !categoryByName.has(catName.toLowerCase())) {
-        uniqueCatNames.add(catName);
-      }
-    }
-
-    // Create missing categories
-    for (const catName of uniqueCatNames) {
-      try {
-        const { data: newCat } = await supabase
-          .from("categories")
-          .insert([{ name: catName, user_id: user.id }])
-          .select("id, name")
-          .single();
-        if (newCat) {
-          categoryByName.set(newCat.name.toLowerCase().trim(), newCat.id);
-        }
-      } catch (e) {
-        console.warn(`Failed to create category "${catName}":`, e);
-      }
-    }
-
     // Fetch existing products for this user to match against
     const { data: existingProducts } = await supabase
       .from("products")
@@ -928,7 +892,6 @@ export default function Catalog() {
 
     const existing = existingProducts || [];
 
-    // Build lookup maps for matching
     const bySku = new Map<string, { id: string; catalog_id: string | null }>();
     const byName = new Map<string, { id: string; catalog_id: string | null }>();
     for (const p of existing) {
@@ -940,17 +903,11 @@ export default function Catalog() {
     const toUpdate: Array<{ id: string; updates: Record<string, unknown> }> = [];
 
     for (const p of products) {
-      // Resolve category
-      const catName = (p.category_name ?? "").trim().toLowerCase();
-      const resolvedCategoryId = catName ? (categoryByName.get(catName) ?? null) : null;
-
-      // Try to match by SKU first, then by name
       const skuKey = p.sku?.toLowerCase().trim();
       const nameKey = p.name.toLowerCase().trim();
       const match = (skuKey ? bySku.get(skuKey) : undefined) || byName.get(nameKey);
 
       if (match) {
-        // Update existing product — only update fields that have values
         const updates: Record<string, unknown> = {};
         if (p.description) updates.description = p.description;
         if (p.sku) updates.sku = p.sku;
@@ -959,7 +916,6 @@ export default function Catalog() {
         if (p.stock > 0) updates.stock = p.stock;
         if (p.brand) updates.brand = p.brand;
         if (p.supplier_url) updates.supplier_url = p.supplier_url;
-        if (resolvedCategoryId) updates.category_id = resolvedCategoryId;
         if (catalogId && !match.catalog_id) updates.catalog_id = catalogId;
 
         if (Object.keys(updates).length > 0) {
@@ -976,7 +932,6 @@ export default function Catalog() {
           stock: p.stock || 0,
           brand: p.brand || null,
           supplier_url: p.supplier_url || null,
-          category_id: resolvedCategoryId,
           status: "draft",
           catalog_id: catalogId,
         });

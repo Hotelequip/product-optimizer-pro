@@ -104,13 +104,13 @@ async function parseExcelFile(file: File): Promise<ParsedProduct[]> {
       const name = (directName || fallbackName).trim();
       if (!name) continue;
       allProducts.push({
-        name, sku: findVal(row, ["ref", "sku", "referencia", "codigo", "code", "cod"]) || null,
-        description: null, cost: parseNum(findVal(row, ["cost", "custo", "tarif", "preco custo", "net", "euro"])),
-        price: parseNum(findVal(row, ["price", "preco", "pvp", "sell", "venda"])),
-        stock: Math.max(0, Math.trunc(parseNum(findVal(row, ["stock", "estoque", "qty", "quantidade", "std", "units"])))),
-        brand: findVal(row, ["brand", "marca"]) || null,
-        category_name: findVal(row, ["category", "categoria", "categories", "categorias", "cat", "product category", "categoria do produto"]) || null,
-        supplier_url: findVal(row, ["supplier_url", "url", "fornecedor_url"]) || null, _source: file.name,
+        name, sku: findVal(row, ["ref", "sku", "referencia", "codigo", "code", "cod", "reference", "article number", "part number", "modelo", "model", "product code", "item number"]) || null,
+        description: null, cost: parseNum(findVal(row, ["cost", "custo", "tarif", "preco custo", "net", "euro", "unit cost", "wholesale", "compra", "prix achat", "purchase price", "buying price", "cost price"])),
+        price: parseNum(findVal(row, ["price", "preco", "pvp", "sell", "venda", "retail", "preco venda", "prix", "regular price", "regular_price"])),
+        stock: Math.max(0, Math.trunc(parseNum(findVal(row, ["stock", "estoque", "qty", "quantidade", "std", "units", "inventory", "disponivel", "available"])))),
+        brand: findVal(row, ["brand", "marca", "fabricante", "manufacturer", "vendor", "fornecedor"]) || null,
+        category_name: findVal(row, ["category", "categoria", "categories", "categorias", "cat", "product category", "categoria do produto", "product categories", "woo:categories"]) || null,
+        supplier_url: findVal(row, ["supplier_url", "url", "fornecedor_url", "supplier url", "link fornecedor", "product url", "external url"]) || null, _source: file.name,
       });
     }
   }

@@ -434,6 +434,59 @@ export default function Catalog() {
     return inserted;
   };
 
+  const ensureImportCategories = async (items: ParsedProduct[]) => {
+    if (!user) return new Map<string, string>();
+
+    const desiredByKey = new Map<string, string>();
+    for (const item of items) {
+      const categoryName = extractPrimaryCategoryName(item.category_name);
+      const key = normalizeLookupKey(categoryName);
+      if (categoryName && key && !desiredByKey.has(key)) {
+        desiredByKey.set(key, categoryName);
+      }
+    }
+
+    if (desiredByKey.size === 0) return new Map<string, string>();
+
+    const { data: existingCategories, error: existingError } = await supabase
+      .from("categories")
+      .select("id, name")
+      .eq("user_id", user.id);
+
+    if (existingError) {
+      throw new Error(`Falha ao ler categorias: ${existingError.message}`);
+    }
+
+    const categoryIdByNameKey = new Map<string, string>();
+    for (const category of existingCategories || []) {
+      categoryIdByNameKey.set(normalizeLookupKey(category.name), category.id);
+    }
+
+    const missingCategoryNames: string[] = [];
+    for (const [key, name] of desiredByKey.entries()) {
+      if (!categoryIdByNameKey.has(key)) {
+        missingCategoryNames.push(name);
+      }
+    }
+
+    if (missingCategoryNames.length > 0) {
+      const { data: createdCategories, error: createError } = await supabase
+        .from("categories")
+        .insert(missingCategoryNames.map((name) => ({ user_id: user.id, name })) as any)
+        .select("id, name");
+
+      if (createError) {
+        throw new Error(`Falha ao criar categorias: ${createError.message}`);
+      }
+
+      for (const category of createdCategories || []) {
+        categoryIdByNameKey.set(normalizeLookupKey(category.name), category.id);
+      }
+    }
+
+    return categoryIdByNameKey;
+  };
+
   const attachImportedFile = async (file: File, catalogId: string | null, forcedType?: "excel" | "pdf" | "other") => {
     const storagePath = buildSafeStoragePath(file);
     const { error: uploadErr } = await supabase.storage

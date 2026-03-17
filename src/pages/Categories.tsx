@@ -155,6 +155,7 @@ export default function Categories() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState("");
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [lastSyncedStoreId, setLastSyncedStoreId] = useState<string | null>(null);
   const progressTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const activeStores = wooStores.filter(s => s.is_active);
@@ -245,6 +246,7 @@ export default function Categories() {
     setSyncProgress(0);
     setSyncResult(null);
     setSyncLabel("A buscar categorias do WooCommerce...");
+    setLastSyncedStoreId(storeId);
     let fakeProgress = 0;
     if (progressTimer.current) clearInterval(progressTimer.current);
     progressTimer.current = setInterval(() => {
@@ -299,6 +301,12 @@ export default function Categories() {
               <Badge variant="outline" className="gap-1 text-xs">
                 <CheckCircle2 className="h-3 w-3" />+{syncResult.created} novas
               </Badge>
+            )}
+            {lastSyncedStoreId && !syncing && (
+              <Button variant="outline" size="sm" onClick={() => syncFromWoo(lastSyncedStoreId)} className="gap-1.5">
+                <RefreshCw className="h-4 w-4" />
+                Re-sincronizar
+              </Button>
             )}
             <Select onValueChange={syncFromWoo} disabled={syncing}>
               <SelectTrigger className="w-[220px]">

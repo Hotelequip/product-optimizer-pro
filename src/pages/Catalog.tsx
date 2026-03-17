@@ -936,6 +936,7 @@ export default function Catalog() {
     if (!user) throw new Error("Sessão expirada.");
 
     const catalogId = selectedCatalogId !== "all" && selectedCatalogId !== "uncategorized" ? selectedCatalogId : null;
+    const categoryIdByNameKey = await ensureImportCategories(products);
 
     // Fetch existing products for this user to match against
     const { data: existingProducts } = await supabase
@@ -958,6 +959,10 @@ export default function Catalog() {
     for (const p of products) {
       const skuKey = p.sku?.toLowerCase().trim();
       const nameKey = p.name.toLowerCase().trim();
+      const importedCategory = extractPrimaryCategoryName(p.category_name);
+      const importedCategoryId = importedCategory
+        ? categoryIdByNameKey.get(normalizeLookupKey(importedCategory)) || null
+        : null;
       const match = (skuKey ? bySku.get(skuKey) : undefined) || byName.get(nameKey);
 
       if (match) {
@@ -970,6 +975,7 @@ export default function Catalog() {
         if (p.brand) updates.brand = p.brand;
         if (p.supplier_url) updates.supplier_url = p.supplier_url;
         if (catalogId && !match.catalog_id) updates.catalog_id = catalogId;
+        if (importedCategoryId) updates.category_id = importedCategoryId;
 
         if (Object.keys(updates).length > 0) {
           toUpdate.push({ id: match.id, updates });
@@ -985,6 +991,7 @@ export default function Catalog() {
           stock: p.stock || 0,
           brand: p.brand || null,
           supplier_url: p.supplier_url || null,
+          category_id: importedCategoryId,
           status: "draft",
           catalog_id: catalogId,
         });

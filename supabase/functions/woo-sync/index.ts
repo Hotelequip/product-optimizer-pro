@@ -514,7 +514,7 @@ Deno.serve(async (req) => {
       const toUpdate: Array<{ id: string; slug: string | null; woo_id: number }> = [];
 
       for (const wooCat of validWooCategories) {
-        const name = String(wooCat.name || '').trim();
+        const name = decodeHtml(String(wooCat.name || '').trim());
         const wooId = Number(wooCat.id);
         const slug = String(wooCat.slug || '').trim() || null;
 

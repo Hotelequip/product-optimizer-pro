@@ -101,7 +101,7 @@ function CategoryTreeItem({
 
         <span className={cn("text-sm flex-1 cursor-pointer", hasChildren && "font-medium")}
           onClick={() => hasChildren && toggleExpand(node.category.id)}>
-          {node.category.name}
+          {decodeHtmlEntities(node.category.name)}
         </span>
 
         {node.category.slug && (

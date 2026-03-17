@@ -566,58 +566,10 @@ export default function Catalog() {
         throw new Error("Nenhuma linha válida encontrada para importar.");
       }
 
-      const categoryNames = Array.from(new Set(
-        deduped
-          .map((p) => extractPrimaryCategoryName(p.category_name))
-          .filter(Boolean)
-      ));
-
-      const categoryIdByName = new Map<string, string>();
-      if (categoryNames.length > 0) {
-        const { data: existingCategories, error: existingCategoriesError } = await supabase
-          .from("categories")
-          .select("id, name")
-          .eq("user_id", user.id);
-
-        if (existingCategoriesError) {
-          throw new Error(`Erro ao carregar categorias: ${existingCategoriesError.message}`);
-        }
-
-        for (const c of existingCategories || []) {
-          categoryIdByName.set(normalizeLookupKey(c.name), c.id);
-        }
-
-        const missingCategoryNames = categoryNames.filter(
-          (name) => !categoryIdByName.has(normalizeLookupKey(name))
-        );
-
-        if (missingCategoryNames.length > 0) {
-          const { data: createdCategories, error: createCategoriesError } = await supabase
-            .from("categories")
-            .insert(missingCategoryNames.map((name) => ({ name, user_id: user.id })))
-            .select("id, name");
-
-          if (createCategoriesError) {
-            throw new Error(`Erro ao criar categorias: ${createCategoriesError.message}`);
-          }
-
-          for (const c of createdCategories || []) {
-            categoryIdByName.set(normalizeLookupKey(c.name), c.id);
-          }
-        }
-      }
-
+      // Pass category_name through as-is (woo-sync will map to WooCommerce categories)
       const payloadToInsert = deduped.map((product) => {
-        const resolvedCategoryName = extractPrimaryCategoryName(product.category_name);
-        const resolvedCategoryId = resolvedCategoryName
-          ? (categoryIdByName.get(normalizeLookupKey(resolvedCategoryName)) ?? null)
-          : null;
-
         const { category_name, ...baseProduct } = product;
-        return {
-          ...baseProduct,
-          category_id: resolvedCategoryId,
-        };
+        return baseProduct;
       });
 
       const imported = await insertProductsInBatches(payloadToInsert);

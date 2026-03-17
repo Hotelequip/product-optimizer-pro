@@ -301,6 +301,33 @@ const parseCsvLine = (line: string, delimiter: string) => {
   return values;
 };
 
+const normalizeLookupKey = (value: unknown) =>
+  String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ");
+
+const extractPrimaryCategoryName = (value: unknown) => {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+
+  const firstGroup = raw
+    .split(/[;,|]/)
+    .map((part) => part.trim())
+    .find(Boolean) || "";
+
+  const breadcrumbParts = firstGroup
+    .split(">")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return breadcrumbParts.length > 0
+    ? breadcrumbParts[breadcrumbParts.length - 1]
+    : firstGroup;
+};
+
 const getAllImageUrls = (imageUrl?: string | null): string[] => {
   if (!imageUrl) return [];
   return imageUrl.split(/,\s*/).map(u => u.trim()).filter(u => u.startsWith("http"));

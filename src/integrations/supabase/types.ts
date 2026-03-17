@@ -358,6 +358,7 @@ export type Database = {
           tags: string[] | null
           updated_at: string
           user_id: string
+          woo_synced_at: string | null
         }
         Insert: {
           brand?: string | null
@@ -389,6 +390,7 @@ export type Database = {
           tags?: string[] | null
           updated_at?: string
           user_id: string
+          woo_synced_at?: string | null
         }
         Update: {
           brand?: string | null
@@ -420,6 +422,7 @@ export type Database = {
           tags?: string[] | null
           updated_at?: string
           user_id?: string
+          woo_synced_at?: string | null
         }
         Relationships: [
           {

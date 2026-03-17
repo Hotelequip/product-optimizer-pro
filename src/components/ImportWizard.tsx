@@ -149,7 +149,9 @@ async function parseCsvFile(file: File): Promise<ParsedProduct[]> {
       description: null, cost: parseNum(findVal(row, ["cost", "custo", "tarif", "preco custo", "net", "euro"])),
       price: parseNum(findVal(row, ["price", "preco", "pvp", "sell", "venda"])),
       stock: Math.max(0, Math.trunc(parseNum(findVal(row, ["stock", "estoque", "qty", "quantidade"])))),
-      brand: findVal(row, ["brand", "marca"]) || null, _source: file.name,
+      brand: findVal(row, ["brand", "marca"]) || null,
+      category_name: findVal(row, ["category", "categoria", "categories", "categorias", "cat", "product category", "categoria do produto"]) || null,
+      _source: file.name,
     });
   }
   return products;

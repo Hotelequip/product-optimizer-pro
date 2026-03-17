@@ -259,10 +259,17 @@ Deno.serve(async (req) => {
           const slug = String(p.slug ?? '').trim();
           if (slug) product.slug = slug;
 
-          // Category
-          const catName = p.category_name;
-          if (catName && categoryMap.has(catName)) {
-            product.categories = [{ id: categoryMap.get(catName) }];
+          // Category (use resolved category, fallback to default Woo category)
+          const resolvedCategoryName = String(
+            p?.category_name
+            ?? categoryNameById.get(String(p?.category_id ?? ''))
+            ?? ''
+          ).trim();
+
+          if (resolvedCategoryName && categoryMap.has(resolvedCategoryName)) {
+            product.categories = [{ id: categoryMap.get(resolvedCategoryName) }];
+          } else if (defaultCategoryId) {
+            product.categories = [{ id: defaultCategoryId }];
           }
 
           // EAN/GTIN + SEO + brand as meta_data
@@ -277,10 +284,13 @@ Deno.serve(async (req) => {
 
           const brand = String(p.brand ?? '').trim();
           if (brand) {
-            product.attributes = [
-              { name: 'Marca', visible: true, variation: false, options: [brand] },
-              { name: 'Marca Do Produto', visible: true, variation: false, options: [brand] },
-            ];
+            product.attributes = brandAttributeId
+              ? [{ id: brandAttributeId, visible: true, variation: false, options: [brand] }]
+              : [
+                  { name: 'Marca', visible: true, variation: false, options: [brand] },
+                  { name: 'Marca Do Produto', visible: true, variation: false, options: [brand] },
+                ];
+
             metaData.push({ key: 'marca_do_produto', value: brand });
             metaData.push({ key: '_brand', value: brand });
             metaData.push({ key: 'xstore_brand', value: brand });

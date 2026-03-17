@@ -279,9 +279,10 @@ Deno.serve(async (req) => {
         const result = new Map<string, string>();
         if (!LOVABLE_API_KEY || wooCategoryNames.length === 0 || items.length === 0) return result;
 
-        const productList = items.map((p, i) => 
-          `${i + 1}. "${p.optimized_title || p.seo_title || p.name}" (marca: ${p.brand || 'N/A'})`
-        ).join('\n');
+        const productList = items.map((p, i) => {
+          const sourceCategory = getResolvedSourceCategoryName(p) || 'N/A';
+          return `${i + 1}. "${p.optimized_title || p.seo_title || p.name}" (marca: ${p.brand || 'N/A'}, categoria_origem: ${sourceCategory})`;
+        }).join('\n');
 
         try {
           const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {

@@ -146,32 +146,12 @@ Deno.serve(async (req) => {
         wooCategories[0]?.id ||
         null;
 
-      // Helper to get or create a WooCommerce category by name
-      async function getOrCreateCategory(name: string): Promise<number | null> {
+      // Lookup existing WooCommerce category by name (NEVER create new ones)
+      function findWooCategory(name: string): number | null {
         const cleaned = String(name ?? '').trim();
         if (!cleaned) return null;
-
         const key = normalizeText(cleaned);
-        const existingId = wooCategoryLookup.get(key);
-        if (existingId) return existingId;
-
-        try {
-          const res = await fetch(`${baseUrl}/wp-json/wc/v3/products/categories`, {
-            method: 'POST',
-            headers: { 'Authorization': `Basic ${encodedCredentials}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: cleaned }),
-          });
-          if (res.ok) {
-            const newCat = await res.json();
-            wooCategories.push(newCat);
-            const nameKey = normalizeText(newCat?.name);
-            const slugKey = normalizeText(newCat?.slug);
-            if (nameKey) wooCategoryLookup.set(nameKey, newCat.id);
-            if (slugKey) wooCategoryLookup.set(slugKey, newCat.id);
-            return newCat.id;
-          }
-        } catch (e) { console.error('Error creating category:', e); }
-        return null;
+        return wooCategoryLookup.get(key) ?? null;
       }
 
       // Discover global attribute used for brand (if configured in WooCommerce)
@@ -235,7 +215,7 @@ Deno.serve(async (req) => {
         ).join('\n');
 
         try {
-          const aiRes = await fetch('https://api.lovable.dev/v1/chat/completions', {
+          const aiRes = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${LOVABLE_API_KEY}`,
@@ -245,7 +225,7 @@ Deno.serve(async (req) => {
               model: 'google/gemini-2.5-flash-lite',
               messages: [{
                 role: 'user',
-                content: `You are a product categorization expert. Given these WooCommerce store categories:\n${wooCategoryNames.join(', ')}\n\nAssign the BEST matching category to each product below. Reply ONLY with a JSON array of objects: [{"index":1,"category":"exact category name"},...]\nIf no good match exists, use the closest parent category.\n\nProducts:\n${productList}`
+                content: `You are a product categorization expert. Given ONLY these existing WooCommerce store categories:\n${wooCategoryNames.join(', ')}\n\nAssign the BEST matching EXISTING category to each product below. You MUST ONLY use categories from the list above — NEVER invent or create new category names. Reply ONLY with a JSON array of objects: [{"index":1,"category":"exact category name from list"},...]\n\nProducts:\n${productList}`
               }],
               temperature: 0.1,
               max_tokens: 2000,
@@ -301,7 +281,7 @@ Deno.serve(async (req) => {
           ).trim();
 
           if (resolvedCategoryName && !categoryMap.has(resolvedCategoryName)) {
-            const catId = await getOrCreateCategory(resolvedCategoryName);
+            const catId = findWooCategory(resolvedCategoryName);
             if (catId) categoryMap.set(resolvedCategoryName, catId);
           }
         }

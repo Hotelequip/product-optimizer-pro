@@ -37,18 +37,27 @@ export interface Product {
 }
 
 export function useProducts() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  // Debug logs (temporários)
+  console.log("[useProducts] user:", user?.id ?? null, "loading:", loading, "enabled:", !loading && !!user);
+
   return useQuery({
-    queryKey: ["products"],
+    queryKey: ["products", user?.id],
     queryFn: async () => {
+      console.log("[useProducts] queryFn running at", new Date().toISOString());
       const { data, error } = await supabase
         .from("products")
         .select("*")
         .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data as unknown as Product[];
+      if (error) {
+        console.error("[useProducts] Supabase error:", error);
+        throw error;
+      }
+      console.log("[useProducts] fetched", data?.length, "products");
+      return (data ?? []) as unknown as Product[];
     },
-    enabled: !!user,
+    enabled: !loading && !!user,
   });
 }
 

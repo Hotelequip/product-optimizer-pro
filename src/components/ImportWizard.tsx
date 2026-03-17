@@ -109,6 +109,7 @@ async function parseExcelFile(file: File): Promise<ParsedProduct[]> {
         price: parseNum(findVal(row, ["price", "preco", "pvp", "sell", "venda"])),
         stock: Math.max(0, Math.trunc(parseNum(findVal(row, ["stock", "estoque", "qty", "quantidade", "std", "units"])))),
         brand: findVal(row, ["brand", "marca"]) || null,
+        category_name: findVal(row, ["category", "categoria", "categories", "categorias", "cat", "product category", "categoria do produto"]) || null,
         supplier_url: findVal(row, ["supplier_url", "url", "fornecedor_url"]) || null, _source: file.name,
       });
     }

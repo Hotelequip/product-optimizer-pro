@@ -1029,6 +1029,7 @@ export default function Catalog() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["products"] }),
       queryClient.invalidateQueries({ queryKey: ["catalog_files"] }),
+      queryClient.invalidateQueries({ queryKey: ["categories"] }),
     ]);
 
     const parts: string[] = [];

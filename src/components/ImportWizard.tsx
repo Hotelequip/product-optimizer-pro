@@ -18,6 +18,7 @@ export interface ParsedProduct {
   stock: number;
   brand: string | null;
   supplier_url?: string | null;
+  category_name?: string | null;
   _source?: string;
   _selected?: boolean;
 }

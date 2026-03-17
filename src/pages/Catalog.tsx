@@ -338,6 +338,30 @@ const getFirstImageUrl = (imageUrl?: string | null): string | null => {
   return urls.length > 0 ? urls[0] : null;
 };
 
+const findExistingCatalogFile = async (params: {
+  userId: string;
+  catalogId: string | null;
+  fileName: string;
+  fileSize: number;
+}) => {
+  let query = supabase
+    .from("catalog_files")
+    .select("id")
+    .eq("user_id", params.userId)
+    .eq("file_name", params.fileName)
+    .eq("file_size", params.fileSize)
+    .limit(1);
+
+  query = params.catalogId
+    ? query.eq("catalog_id", params.catalogId)
+    : query.is("catalog_id", null);
+
+  const { data, error } = await query;
+  if (error) throw new Error(`Falha ao verificar ficheiro duplicado: ${error.message}`);
+
+  return Boolean(data && data.length > 0);
+};
+
 export default function Catalog() {
   const { data: products = [], isLoading } = useProducts();
   const { data: categories = [] } = useCategories();

@@ -986,16 +986,23 @@ export default function Catalog() {
     const bySku = new Map<string, { id: string; catalog_id: string | null }>();
     const byName = new Map<string, { id: string; catalog_id: string | null }>();
     for (const p of existing) {
-      if (p.sku) bySku.set(p.sku.toLowerCase().trim(), { id: p.id, catalog_id: p.catalog_id });
-      byName.set(p.name.toLowerCase().trim(), { id: p.id, catalog_id: p.catalog_id });
+      const normalizedSku = normalizeLookupKey(p.sku);
+      const normalizedName = normalizeLookupKey(p.name);
+      if (normalizedSku) bySku.set(normalizedSku, { id: p.id, catalog_id: p.catalog_id });
+      if (normalizedName) byName.set(normalizedName, { id: p.id, catalog_id: p.catalog_id });
     }
 
     const toInsert: Array<Record<string, unknown>> = [];
     const toUpdate: Array<{ id: string; updates: Record<string, unknown> }> = [];
+    const seenImportKeys = new Set<string>();
 
     for (const p of products) {
-      const skuKey = p.sku?.toLowerCase().trim();
-      const nameKey = p.name.toLowerCase().trim();
+      const skuKey = normalizeLookupKey(p.sku);
+      const nameKey = normalizeLookupKey(p.name);
+      const dedupeKey = skuKey ? `sku:${skuKey}` : nameKey ? `name:${nameKey}` : "";
+      if (!dedupeKey || seenImportKeys.has(dedupeKey)) continue;
+      seenImportKeys.add(dedupeKey);
+
       const importedCategory = extractPrimaryCategoryName(p.category_name);
       const importedCategoryId = importedCategory
         ? categoryIdByNameKey.get(normalizeLookupKey(importedCategory)) || null

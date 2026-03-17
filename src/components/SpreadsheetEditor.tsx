@@ -655,9 +655,12 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
   };
 
   const getStatusBadge = (product: Product) => {
-    const labels: Record<string, string> = { active: "Aprovado", inactive: "Inativo", draft: "Pendente" };
+    const isPublished = !!product.woo_synced_at;
+    const labels: Record<string, string> = { active: isPublished ? "Publicado" : "Aprovado", inactive: "Inativo", draft: "Pendente" };
     const colors: Record<string, string> = {
-      active: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+      active: isPublished
+        ? "bg-green-500/20 text-green-400 border-green-500/30"
+        : "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
       inactive: "bg-muted text-muted-foreground",
       draft: "bg-amber-500/20 text-amber-400 border-amber-500/30",
     };

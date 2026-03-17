@@ -813,11 +813,21 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
                   let errors = 0;
                   setBulkProgress({ current: 0, total: totalProducts, label: "WooCommerce" });
                   try {
+                    const fileHintsByLookupKey = await buildCatalogFileHints(selected);
+
                     for (let i = 0; i < totalProducts; i += BATCH_SIZE) {
-                      const batch = selected.slice(i, i + BATCH_SIZE).map(p => ({
-                        ...p,
-                        category_name: categories.find(c => c.id === p.category_id)?.name || null,
-                      }));
+                      const batch = selected.slice(i, i + BATCH_SIZE).map((p) => {
+                        const skuKey = normalizeLookupKey(p.sku);
+                        const nameKey = normalizeLookupKey(p.name);
+                        const fileHint = (skuKey && fileHintsByLookupKey.get(skuKey)) || (nameKey && fileHintsByLookupKey.get(nameKey));
+
+                        return {
+                          ...p,
+                          brand: p.brand || fileHint?.brand || null,
+                          category_name: categories.find((c) => c.id === p.category_id)?.name || fileHint?.category_name || null,
+                        };
+                      });
+
                       const { data, error } = await supabase.functions.invoke("woo-sync", {
                         body: { action: "export", store_id: storeId, products: batch },
                       });

@@ -1026,7 +1026,7 @@ export function SpreadsheetEditor({ products }: { products: Product[] }) {
                         const slug = slugify(product.optimized_title || product.seo_title || product.name);
                         const score = calcSeoScore(product);
                         updateProduct.mutateAsync({ id: product.id, slug, seo_score: score, status: "active" });
-                        toast({ title: "Produto aprovado!" });
+                        toast({ title: "Produto aprovado para envio ao WooCommerce!" });
                       }} title="Aprovar">
                       <Check className="h-3 w-3" />
                     </Button>

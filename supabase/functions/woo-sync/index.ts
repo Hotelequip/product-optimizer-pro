@@ -281,7 +281,7 @@ Deno.serve(async (req) => {
           ).trim();
 
           if (resolvedCategoryName && !categoryMap.has(resolvedCategoryName)) {
-            const catId = await getOrCreateCategory(resolvedCategoryName);
+            const catId = findWooCategory(resolvedCategoryName);
             if (catId) categoryMap.set(resolvedCategoryName, catId);
           }
         }

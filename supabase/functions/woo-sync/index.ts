@@ -362,16 +362,17 @@ Deno.serve(async (req) => {
           const slug = String(p.slug ?? '').trim();
           if (slug) product.slug = slug;
 
-          // Category (use resolved category from file/DB/AI, fallback to default)
-          const resolvedCategoryName = String(
-            p?.category_name
-            ?? categoryNameById.get(String(p?.category_id ?? ''))
-            ?? aiCategoryCache.get(normalizeKey(p.sku || p.name))
-            ?? ''
-          ).trim();
+          // Category (source file/DB first, then AI-restricted fallback, then default)
+          const sourceCategoryName = getResolvedSourceCategoryName(p);
+          const aiSuggestedCategoryName = String(aiCategoryCache.get(normalizeKey(p.sku || p.name)) ?? '').trim();
 
-          if (resolvedCategoryName && categoryMap.has(resolvedCategoryName)) {
-            product.categories = [{ id: categoryMap.get(resolvedCategoryName) }];
+          const mappedCategoryId =
+            findWooCategory(sourceCategoryName)
+            ?? findWooCategory(aiSuggestedCategoryName)
+            ?? null;
+
+          if (mappedCategoryId) {
+            product.categories = [{ id: mappedCategoryId }];
           } else if (defaultCategoryId) {
             product.categories = [{ id: defaultCategoryId }];
           }

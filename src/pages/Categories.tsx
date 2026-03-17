@@ -16,6 +16,12 @@ import { cn } from "@/lib/utils";
 
 type SyncPhase = "idle" | "fetching" | "saving" | "done" | "error";
 
+/** Decode HTML entities for display (handles data already stored with encoding) */
+function decodeHtmlEntities(text: string): string {
+  const doc = new DOMParser().parseFromString(text, "text/html");
+  return doc.documentElement.textContent || text;
+}
+
 interface TreeNode {
   category: Category;
   children: TreeNode[];

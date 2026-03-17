@@ -146,32 +146,12 @@ Deno.serve(async (req) => {
         wooCategories[0]?.id ||
         null;
 
-      // Helper to get or create a WooCommerce category by name
-      async function getOrCreateCategory(name: string): Promise<number | null> {
+      // Lookup existing WooCommerce category by name (NEVER create new ones)
+      function findWooCategory(name: string): number | null {
         const cleaned = String(name ?? '').trim();
         if (!cleaned) return null;
-
         const key = normalizeText(cleaned);
-        const existingId = wooCategoryLookup.get(key);
-        if (existingId) return existingId;
-
-        try {
-          const res = await fetch(`${baseUrl}/wp-json/wc/v3/products/categories`, {
-            method: 'POST',
-            headers: { 'Authorization': `Basic ${encodedCredentials}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: cleaned }),
-          });
-          if (res.ok) {
-            const newCat = await res.json();
-            wooCategories.push(newCat);
-            const nameKey = normalizeText(newCat?.name);
-            const slugKey = normalizeText(newCat?.slug);
-            if (nameKey) wooCategoryLookup.set(nameKey, newCat.id);
-            if (slugKey) wooCategoryLookup.set(slugKey, newCat.id);
-            return newCat.id;
-          }
-        } catch (e) { console.error('Error creating category:', e); }
-        return null;
+        return wooCategoryLookup.get(key) ?? null;
       }
 
       // Discover global attribute used for brand (if configured in WooCommerce)
